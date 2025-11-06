@@ -95,12 +95,12 @@ BackVault will automatically:
 * Files are timestamped, e.g.:
 
   ```
-  backup_20251106_210613.json
+  backup_20251106_210613.enc
   ```
 * To decrypt manually:
 
   ```bash
-  openssl enc -d -aes-256-cbc -in file.json -out vault.json -pass pass:your_backup_password
+  openssl enc -d -aes-256-cbc -in file.enc -out vault.json -pass pass:your_backup_password
   ```
 
 ---

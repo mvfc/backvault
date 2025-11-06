@@ -53,7 +53,7 @@ def main():
 
     # Generate timestamped filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_file = f"/app/backups/backup_{timestamp}.json"
+    backup_file = f"/app/backups/backup_{timestamp}.enc"
 
     # Run export command
     logger.info(f"Exporting backup to {backup_file}...")

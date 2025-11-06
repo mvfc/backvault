@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "Initializing container and setting up cron job"
 BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
-CRON_EXPRESSION=${CRON_EXPRESSION:-"*/$BACKUP_INTERVAL_HOURS * * * *"}
+CRON_EXPRESSION=${CRON_EXPRESSION:-"* */$BACKUP_INTERVAL_HOURS * * *"}
 
 cat > /app/run_wrapper.sh <<EOF
 #!/bin/bash
