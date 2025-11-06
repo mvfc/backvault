@@ -28,8 +28,9 @@ RUN touch /var/log/cron.log && \
 
 WORKDIR /app
 
-# Set up cron job
-RUN echo "0 */${BACKUP_INTERVAL_HOURS:-12} * * * /usr/bin/python3 /app/run.py >> /var/log/cron.log 2>&1" | crontab -
+COPY ./entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 
 # Start cron in the foreground
-CMD ["cron", "-f"]
+ENTRYPOINT ["/app/entrypoint.sh"]

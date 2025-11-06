@@ -1,0 +1,10 @@
+.env-example
+.env
+.gitignore
+.venv/
+.ruff_cache/
+logs/
+LICENSE
+uv.lock
+pyproject.toml
+backup/
