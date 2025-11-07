@@ -20,6 +20,7 @@ It’s designed for hands-free, secure, and automated backups using the official
 ## 📦 Quick Start (Docker)
 
 You can run BackVault directly using the **published Docker image**, no build required.
+You can use either the github registry image (ghcr.io/mvfc/backvault) or the Docker Hub image (mvflc/backvault).
 
 ```bash
 docker run -d \
