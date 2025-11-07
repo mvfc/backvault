@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     bash \
     cron \
-    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Bitwarden CLI
@@ -15,6 +14,11 @@ RUN set -eux; \
     unzip bw.zip -d /usr/local/bin; \
     chmod +x /usr/local/bin/bw; \
     rm bw.zip
+
+RUN apt-get remove -y \
+    curl \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create backup directory
 RUN mkdir -p /app/backups && \
