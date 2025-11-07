@@ -4,6 +4,14 @@ import json
 import logging
 from typing import Any
 from sys import stdout
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+
+# Constants for encryption
+SALT_SIZE = 16
+KEY_SIZE = 32  # For AES-256
+PBKDF2_ITERATIONS = 320000
 
 logging.basicConfig(
     level=logging.INFO,
@@ -192,3 +200,46 @@ class BitwardenClient:
         self.session = result.stdout.strip()
         logger.info("Vault unlocked successfully")
         return self.session
+    
+    def encrypt_data(self, data: bytes, password: str) -> bytes:
+        """
+        Encrypts data using AES-256-GCM with a key derived from the password.
+        Format: salt (16 bytes) + nonce (12 bytes) + ciphertext + tag (16 bytes)
+        """
+        logger.info("Encrypting data in-memory...")
+        salt = os.urandom(SALT_SIZE)
+
+        # Derive a key from the password and salt
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=KEY_SIZE,
+            salt=salt,
+            iterations=PBKDF2_ITERATIONS,
+        )
+        key = kdf.derive(password.encode("utf-8"))
+
+        # Encrypt using AES-GCM
+        aesgcm = AESGCM(key)
+        nonce = os.urandom(12)  # GCM recommended nonce size
+        ciphertext = aesgcm.encrypt(nonce, data, None)
+
+        logger.info("Encryption successful.")
+        return salt + nonce + ciphertext
+
+
+    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
+        """Exports using Bitwarden's built-in encryption."""
+        logger.info(f"Exporting with Bitwarden encryption to {backup_file}...")
+        self._run(
+            cmd=["export", "--output", backup_file, "--format", "json", "--password", file_pw],
+            capture_json=False,
+        )
+
+
+    def export_raw_encrypted(self, backup_file: str, file_pw: str):
+        """Exports raw data and encrypts it in-memory."""
+        logger.info(f"Exporting raw data from Bitwarden...")
+        raw_json = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=True)
+        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
+        with open(backup_file, "wb") as f:
+            f.write(encrypted_data)
