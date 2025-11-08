@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Initializing container and setting up cron job"
+echo "Initializing BackVault backup service"
 
 # Validate BACKUP_INTERVAL_HOURS
 BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
@@ -10,50 +10,75 @@ if ! [[ "$BACKUP_INTERVAL_HOURS" =~ ^[1-9][0-9]*$ ]] || [ "$BACKUP_INTERVAL_HOUR
     exit 1
 fi
 
-# Validate CRON_EXPRESSION if provided, otherwise use interval
-if [ -n "${CRON_EXPRESSION:-}" ]; then
-    # Validate cron expression format (5 fields, allowed characters)
-    if ! echo "$CRON_EXPRESSION" | grep -qE '^[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+$'; then
-        echo "ERROR: Invalid CRON_EXPRESSION format. Must be 5 space-separated fields with allowed characters: 0-9 * / , -"
-        exit 1
+# Convert hours to seconds for sleep
+BACKUP_INTERVAL_SECONDS=$((BACKUP_INTERVAL_HOURS * 3600))
+
+# Log file for backup operations
+LOG_FILE=${LOG_FILE:-/var/log/cron.log}
+touch "$LOG_FILE"
+
+# Function to run backup
+run_backup() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting backup..."
+    /usr/local/bin/python /app/run.py 2>&1 | tee -a "$LOG_FILE"
+    local exit_code=${PIPESTATUS[0]}
+    if [ $exit_code -eq 0 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Backup completed successfully"
+    else
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Backup failed with exit code $exit_code"
     fi
-    # Additional check for field ranges (basic validation)
-    if ! echo "$CRON_EXPRESSION" | grep -qE '^([0-9*,/-]+\s+){4}[0-9*,/-]+$'; then
-        echo "ERROR: CRON_EXPRESSION contains invalid characters"
-        exit 1
+    return $exit_code
+}
+
+# Function to run cleanup
+run_cleanup() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Running cleanup..."
+    /app/cleanup.sh 2>&1 | tee -a "$LOG_FILE"
+    local exit_code=${PIPESTATUS[0]}
+    if [ $exit_code -eq 0 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Cleanup completed successfully"
+    else
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Cleanup failed with exit code $exit_code"
     fi
-else
-    CRON_EXPRESSION="0 */$BACKUP_INTERVAL_HOURS * * *"
-fi
+    return $exit_code
+}
 
-# Create wrapper script using printf with proper quoting to avoid command injection
-# Whitelist only necessary environment variables
-{
-    echo '#!/bin/bash'
-    echo 'set -euo pipefail'
-    echo 'export PATH="/usr/local/bin:$PATH"'
+# Trap SIGTERM and SIGINT for graceful shutdown
+shutdown() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Received shutdown signal, exiting gracefully..."
+    exit 0
+}
 
-    # Whitelist of allowed environment variables
-    for var in BW_CLIENT_ID BW_CLIENT_SECRET BW_PASSWORD BW_SERVER BW_FILE_PASSWORD \
-               BACKUP_DIR BACKUP_ENCRYPTION_MODE RETAIN_DAYS LOG_FILE \
-               NODE_TLS_REJECT_UNAUTHORIZED; do
-        # Use printf %q for safe shell quoting
-        if [ -n "${!var:-}" ]; then
-            printf 'export %s=%q\n' "$var" "${!var}"
-        fi
-    done
+trap shutdown SIGTERM SIGINT
 
-    echo '/usr/local/bin/python /app/run.py 2>&1 | tee -a /var/log/cron.log > /proc/1/fd/1'
-} > /app/run_wrapper.sh
+# Run initial backup immediately on startup
+echo "Running initial backup on startup..."
+run_backup || true
 
-# Set restrictive permissions (owner read/write/execute only)
-chmod 700 /app/run_wrapper.sh
+# Calculate seconds until midnight for daily cleanup
+seconds_until_midnight() {
+    local current_epoch=$(date +%s)
+    local midnight_epoch=$(date -d "tomorrow 00:00:00" +%s 2>/dev/null || date -v+1d -v0H -v0M -v0S +%s 2>/dev/null || echo $((current_epoch + 86400)))
+    echo $((midnight_epoch - current_epoch))
+}
 
-# Use printf to safely create crontab (prevents interpretation of escape sequences)
-{
-    printf '%s /app/run_wrapper.sh\n' "$CRON_EXPRESSION"
-    printf '0 0 * * * /app/cleanup.sh 2>&1 | tee -a /var/log/cron.log > /proc/1/fd/1\n'
-} | crontab -
+# Track last cleanup time
+last_cleanup_day=$(date +%j)
 
-echo "Cron setup complete, starting cron on foreground."
-exec cron -f
+# Main loop
+echo "Starting backup loop with interval of $BACKUP_INTERVAL_HOURS hours ($BACKUP_INTERVAL_SECONDS seconds)"
+while true; do
+    # Sleep for the backup interval
+    sleep "$BACKUP_INTERVAL_SECONDS" &
+    wait $!
+
+    # Run backup
+    run_backup || true
+
+    # Check if we need to run cleanup (once per day at midnight)
+    current_day=$(date +%j)
+    if [ "$current_day" != "$last_cleanup_day" ]; then
+        run_cleanup || true
+        last_cleanup_day=$current_day
+    fi
+done

@@ -20,28 +20,28 @@ RUN apt-get remove -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Create backup directory
-RUN mkdir -p /app/backups && \
-    mkdir -p /var/log/cron
-
-COPY ./src /app
-
-RUN touch /var/log/cron.log && \
-    chmod 644 /var/log/cron.log
+# Create non-root user and group
+RUN groupadd -r backvault && \
+    useradd -r -g backvault -u 1000 backvault && \
+    mkdir -p /app/backups /var/log && \
+    chown -R backvault:backvault /app /var/log
 
 WORKDIR /app
 
-COPY ./entrypoint.sh /app/entrypoint.sh
+# Copy application files
+COPY --chown=backvault:backvault ./src /app/
+COPY --chown=backvault:backvault ./entrypoint.sh /app/entrypoint.sh
+COPY --chown=backvault:backvault ./cleanup.sh /app/cleanup.sh
+COPY --chown=backvault:backvault requirements.txt /app/requirements.txt
 
-COPY ./cleanup.sh /app/cleanup.sh
+# Set execute permissions on scripts
+RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 
-RUN chmod +x /app/entrypoint.sh
-
-RUN chmod +x /app/cleanup.sh
-
-COPY requirements.txt /app/requirements.txt
-
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-input --no-cache-dir -r requirements.txt
+
+# Switch to non-root user
+USER backvault
 
 ENTRYPOINT ["/app/entrypoint.sh"]

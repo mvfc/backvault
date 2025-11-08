@@ -128,7 +128,10 @@ This mode exports the vault as raw JSON and then encrypts it in-memory using a s
 The main advantage is that you **do not need the Bitwarden CLI** to decrypt your data, making it ideal for disaster recovery. You can use standard tools like Python or OpenSSL.
 
 **File Structure:**
-The resulting `.enc` file contains: `[16-byte salt][12-byte nonce][encrypted data + 16-byte auth tag]`
+The resulting `.enc` file contains: `[4-byte version][16-byte salt][12-byte nonce][encrypted data + 16-byte auth tag]`
+
+**Version History:**
+- **Version 1**: PBKDF2 iterations: 600,000 (OWASP 2023 recommendation)
 
 **How to Decrypt (Python Script):**
 
@@ -150,16 +153,39 @@ from cryptography.exceptions import InvalidTag
 
 SALT_SIZE = 16
 KEY_SIZE = 32
-PBKDF2_ITERATIONS = 320000
+
+# Version-specific parameters
+VERSION_PARAMS = {
+    1: {"iterations": 600000},  # Version 1: OWASP 2023 recommendation
+}
 
 def decrypt_data(encrypted_data: bytes, password: str) -> bytes:
-    salt = encrypted_data[:SALT_SIZE]
-    nonce = encrypted_data[SALT_SIZE:SALT_SIZE+12]
-    ciphertext_with_tag = encrypted_data[SALT_SIZE+12:]
+    # Read version header (4 bytes, big-endian)
+    version = int.from_bytes(encrypted_data[:4], byteorder='big')
 
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=KEY_SIZE, salt=salt, iterations=PBKDF2_ITERATIONS)
+    if version not in VERSION_PARAMS:
+        raise ValueError(f"Unsupported file version: {version}")
+
+    # Get version-specific parameters
+    iterations = VERSION_PARAMS[version]["iterations"]
+    print(f"Decrypting version {version} file (PBKDF2 iterations: {iterations:,})", file=sys.stderr)
+
+    # Extract components after version header
+    offset = 4
+    salt = encrypted_data[offset:offset+SALT_SIZE]
+    nonce = encrypted_data[offset+SALT_SIZE:offset+SALT_SIZE+12]
+    ciphertext_with_tag = encrypted_data[offset+SALT_SIZE+12:]
+
+    # Derive key
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=KEY_SIZE,
+        salt=salt,
+        iterations=iterations
+    )
     key = kdf.derive(password.encode("utf-8"))
 
+    # Decrypt
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ciphertext_with_tag, None)
 
@@ -174,14 +200,16 @@ if __name__ == "__main__":
     try:
         with open(file_path, "rb") as f:
             encrypted_contents = f.read()
-        
+
         decrypted_json = decrypt_data(encrypted_contents, password)
         print(decrypted_json.decode("utf-8"))
         print("\nDecryption successful.", file=sys.stderr)
     except InvalidTag:
         print("Decryption failed: Invalid password or corrupted file.", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
+        sys.exit(1)
 ```
 
 ---

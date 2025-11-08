@@ -3,9 +3,11 @@ import subprocess
 import json
 import logging
 import re
-from typing import Any
+import time
+from typing import Any, Callable
 from sys import stdout
 from pathlib import Path
+from functools import wraps
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -13,7 +15,8 @@ from cryptography.hazmat.primitives import hashes
 # Constants for encryption
 SALT_SIZE = 16
 KEY_SIZE = 32  # For AES-256
-PBKDF2_ITERATIONS = 320000
+PBKDF2_ITERATIONS = 600000  # OWASP 2023 recommendation
+ENCRYPTION_VERSION = 1  # File format version for future compatibility
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +33,40 @@ class BitwardenError(Exception):
     """Base exception for Bitwarden wrapper."""
 
     pass
+
+
+def retry_with_backoff(max_attempts: int = 3, base_delay: float = 2.0, max_delay: float = 30.0):
+    """
+    Decorator to retry a function with exponential backoff on BitwardenError.
+
+    :param max_attempts: Maximum number of retry attempts
+    :param base_delay: Initial delay in seconds (doubles with each retry)
+    :param max_delay: Maximum delay between retries in seconds
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except BitwardenError as e:
+                    last_exception = e
+                    if attempt == max_attempts - 1:
+                        # Last attempt failed, re-raise
+                        logger.error(f"{func.__name__} failed after {max_attempts} attempts")
+                        raise
+                    # Calculate delay with exponential backoff
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    logger.warning(
+                        f"{func.__name__} attempt {attempt + 1}/{max_attempts} failed: {e}. "
+                        f"Retrying in {delay:.1f} seconds..."
+                    )
+                    time.sleep(delay)
+            # Should not reach here, but just in case
+            raise last_exception
+        return wrapper
+    return decorator
 
 
 class BitwardenClient:
@@ -166,12 +203,14 @@ class BitwardenClient:
         """Return current session status"""
         return self._run(["status"])
 
+    @retry_with_backoff(max_attempts=3, base_delay=2.0)
     def login(
         self, email: str | None = None, password: str | None = None, raw: bool = True
     ) -> str:
         """
         Login with email/password or API key.
         Returns session key if raw=True.
+        Retries up to 3 times with exponential backoff on failure.
         """
         if self.use_api_key:
             logger.info("Logging in via API key")
@@ -211,10 +250,12 @@ class BitwardenClient:
 
         return self.session
 
+    @retry_with_backoff(max_attempts=3, base_delay=2.0)
     def unlock(self, password: str) -> str:
         """
         Unlock vault with master password or API key secret.
         Returns session token.
+        Retries up to 3 times with exponential backoff on failure.
         """
         env = os.environ.copy()
         env["BW_SESSION"] = self.session
@@ -239,9 +280,18 @@ class BitwardenClient:
     def encrypt_data(self, data: bytes, password: str) -> bytes:
         """
         Encrypts data using AES-256-GCM with a key derived from the password.
-        Format: salt (16 bytes) + nonce (12 bytes) + ciphertext + tag (16 bytes)
+        Format: version (4 bytes) + salt (16 bytes) + nonce (12 bytes) + ciphertext + tag (16 bytes)
+
+        Version 1 format:
+        - PBKDF2 iterations: 600,000
+        - Key derivation: PBKDF2-HMAC-SHA256
+        - Encryption: AES-256-GCM
         """
         logger.info("Encrypting data in-memory...")
+
+        # Add version header for future compatibility
+        version = ENCRYPTION_VERSION.to_bytes(4, byteorder='big')
+
         salt = os.urandom(SALT_SIZE)
 
         # Derive a key from the password and salt
@@ -259,7 +309,7 @@ class BitwardenClient:
         ciphertext = aesgcm.encrypt(nonce, data, None)
 
         logger.info("Encryption successful.")
-        return salt + nonce + ciphertext
+        return version + salt + nonce + ciphertext
 
 
     def _validate_backup_path(self, backup_file: str, allowed_base: str = "/app/backups") -> str:
