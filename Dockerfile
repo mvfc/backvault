@@ -39,7 +39,9 @@ RUN chmod +x /app/entrypoint.sh
 
 RUN chmod +x /app/cleanup.sh
 
+COPY requirements.txt /app/requirements.txt
+
 RUN pip install --upgrade pip && \
-    pip install --no-input --no-cache-dir cryptography
+    pip install --no-input --no-cache-dir -r requirements.txt
 
 ENTRYPOINT ["/app/entrypoint.sh"]

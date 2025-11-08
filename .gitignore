@@ -5,3 +5,5 @@ __pycache__/
 backup/
 logs/
 decrypt.py
+.vscode/
+.python-version
