@@ -1,5 +1,7 @@
 import os
+import sys
 import logging
+from pathlib import Path
 from bw_client import BitwardenClient
 from datetime import datetime
 from sys import stdout
@@ -18,6 +20,27 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
 
+
+def validate_backup_dir(backup_dir: str) -> str:
+    """
+    Validate and sanitize the backup directory path.
+    Prevents path traversal attacks.
+    """
+    ALLOWED_BASE = "/app"
+
+    # Convert to absolute path
+    backup_path = Path(backup_dir).resolve()
+    allowed_base = Path(ALLOWED_BASE).resolve()
+
+    # Check if path is within allowed base
+    try:
+        backup_path.relative_to(allowed_base)
+    except ValueError:
+        logger.critical(f"BACKUP_DIR '{backup_dir}' is outside allowed path '{ALLOWED_BASE}'")
+        sys.exit(1)
+
+    return str(backup_path)
+
 def main():
     # Vault access information
     client_id = require_env("BW_CLIENT_ID")
@@ -27,14 +50,29 @@ def main():
     file_pw = require_env("BW_FILE_PASSWORD")
 
     # Configuration
-    backup_dir = os.getenv("BACKUP_DIR", "/app/backups")
-    log_file = os.getenv("LOG_FILE") # Optional log file
-    encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+    backup_dir_raw = os.getenv("BACKUP_DIR", "/app/backups")
+    log_file = os.getenv("LOG_FILE")  # Optional log file
+
+    # Validate backup directory
+    backup_dir = validate_backup_dir(backup_dir_raw)
+
+    # Validate encryption mode with strict whitelist
+    ALLOWED_MODES = {"raw", "bitwarden"}
+    encryption_mode_raw = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden")
+    encryption_mode = encryption_mode_raw.lower().strip()
+
+    if encryption_mode not in ALLOWED_MODES:
+        logger.critical(
+            f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode_raw}'. "
+            f"Must be one of {ALLOWED_MODES}."
+        )
+        sys.exit(1)
 
     if log_file:
         logger.addHandler(logging.FileHandler(log_file))
 
-    os.makedirs(backup_dir, exist_ok=True)
+    # Create backup directory with secure permissions
+    os.makedirs(backup_dir, mode=0o700, exist_ok=True)
 
     # Create client
     logger.info("Connecting to vault...")
@@ -50,13 +88,13 @@ def main():
             source.login()
         except Exception as e:
             logger.error(f"Login failed: {e}")
-            return
+            sys.exit(1)
 
         try:
             source.unlock(master_pw)
         except Exception as e:
             logger.error(f"Unlock failed: {e}")
-            return
+            sys.exit(1)
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,18 +102,23 @@ def main():
 
         logger.info(f"Starting export with mode: '{encryption_mode}'")
 
-        if encryption_mode == "raw":
-            source.export_raw_encrypted(backup_file, file_pw)
-        elif encryption_mode == "bitwarden":
-            source.export_bitwarden_encrypted(backup_file, file_pw)
-        else:
-            logger.error(f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'.")
-            return
+        try:
+            if encryption_mode == "raw":
+                source.export_raw_encrypted(backup_file, file_pw, backup_dir)
+            elif encryption_mode == "bitwarden":
+                source.export_bitwarden_encrypted(backup_file, file_pw, backup_dir)
 
-        logger.info(f"Export completed successfully to {backup_file}.")
+            logger.info(f"Export completed successfully.")
+        except Exception as e:
+            logger.error(f"Export failed: {e}")
+            sys.exit(1)
+
     finally:
-        source.logout()
-        logger.info("Successfully logged out.")
+        try:
+            source.logout()
+            logger.info("Successfully logged out.")
+        except Exception as e:
+            logger.warning(f"Logout encountered an error: {e}")
 
 
 if __name__ == "__main__":

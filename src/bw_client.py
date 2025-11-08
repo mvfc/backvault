@@ -2,8 +2,10 @@ import os
 import subprocess
 import json
 import logging
+import re
 from typing import Any
 from sys import stdout
+from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -58,7 +60,7 @@ class BitwardenClient:
             use_api_key and client_id is not None and client_secret is not None
         )
         if server:
-            logger.debug(f"Configuring BW server: {server}")
+            logger.info(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
             try:
                 subprocess.run(
@@ -73,14 +75,14 @@ class BitwardenClient:
                 if e.returncode == 1:
                     pass
                 else:
-                    logger.error(f"Bitwarden CLI error: {e.stderr.strip()}")
-                    raise BitwardenError(e.stderr.strip())
-            except:
+                    logger.error(f"Bitwarden CLI error configuring server")
+                    raise BitwardenError(f"Failed to configure BW server") from e
+            except Exception as e:
                 try:
                     self.logout()
-                except:
+                except Exception:
                     pass
-                raise BitwardenError(f"Failed to configure BW server to {server}")
+                raise BitwardenError(f"Failed to configure BW server") from e
 
     def __enter__(self):
         self.login()
@@ -99,29 +101,57 @@ class BitwardenClient:
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
-        logger.debug(f"Running command: {' '.join(full_cmd)}")
-        result = subprocess.run(
-            full_cmd,
-            text=True,
-            capture_output=True,
-            check=True,
-            env=env,
-            preexec_fn=None,  # Disable process group creation
-        )
 
-        if result.returncode != 0:
-            logger.error(f"Bitwarden CLI error: {result.stderr.strip()}")
-            raise BitwardenError(result.stderr.strip())
+        # Log command but redact sensitive arguments
+        safe_cmd = self._redact_sensitive_args(full_cmd)
+        logger.info(f"Running command: {' '.join(safe_cmd)}")
+
+        try:
+            result = subprocess.run(
+                full_cmd,
+                text=True,
+                capture_output=True,
+                check=True,
+                env=env,
+                preexec_fn=None,  # Disable process group creation
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Bitwarden CLI command failed with exit code {e.returncode}")
+            raise BitwardenError(f"Bitwarden CLI command failed") from e
 
         output = result.stdout.strip()
         if capture_json:
             try:
                 return json.loads(output)
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse JSON output: {output}")
-                raise BitwardenError("Failed to parse JSON output")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON output from Bitwarden CLI")
+                raise BitwardenError("Failed to parse JSON output") from e
         else:
             return output
+
+    def _redact_sensitive_args(self, cmd: list[str]) -> list[str]:
+        """
+        Redact sensitive arguments from command list for safe logging.
+        """
+        redacted = []
+        skip_next = False
+        sensitive_flags = {"--password", "--raw"}
+        sensitive_commands = {"unlock"}
+
+        for i, arg in enumerate(cmd):
+            if skip_next:
+                redacted.append("***REDACTED***")
+                skip_next = False
+            elif arg in sensitive_flags:
+                redacted.append(arg)
+                skip_next = True
+            elif arg in sensitive_commands and i + 1 < len(cmd):
+                redacted.append(arg)
+                skip_next = True
+            else:
+                redacted.append(arg)
+
+        return redacted
 
     # -------------------------------
     # Core API methods
@@ -159,12 +189,12 @@ class BitwardenClient:
                     cmd, capture_output=True, text=True, check=True, env=env
                 )
             except subprocess.CalledProcessError as e:
-                logger.error(f"Bitwarden CLI login failed: {e.stderr.strip()}")
+                logger.error(f"Bitwarden CLI login failed")
                 try:
                     self.logout()
-                except:
+                except Exception:
                     pass
-                raise BitwardenError(e.stderr.strip())
+                raise BitwardenError("Bitwarden CLI login failed") from e
 
             self.session = result.stdout.strip()
             logger.info("Logged in successfully")
@@ -195,11 +225,12 @@ class BitwardenClient:
                 cmd, capture_output=True, text=True, check=True, env=env
             )
         except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Bitwarden CLI unlock failed: {e.stderr.strip()}. Logging out."
-            )
-            self.logout()
-            raise BitwardenError(e.stderr.strip())
+            logger.error(f"Bitwarden CLI unlock failed. Logging out.")
+            try:
+                self.logout()
+            except Exception:
+                pass
+            raise BitwardenError("Bitwarden CLI unlock failed") from e
 
         self.session = result.stdout.strip()
         logger.info("Vault unlocked successfully")
@@ -231,19 +262,56 @@ class BitwardenClient:
         return salt + nonce + ciphertext
 
 
-    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
+    def _validate_backup_path(self, backup_file: str, allowed_base: str = "/app/backups") -> str:
+        """
+        Validate that the backup file path is within the allowed directory.
+        Prevents path traversal attacks.
+        Returns the validated absolute path.
+        """
+        # Convert to absolute paths
+        backup_path = Path(backup_file).resolve()
+        allowed_path = Path(allowed_base).resolve()
+
+        # Check if backup path is within allowed directory
+        try:
+            backup_path.relative_to(allowed_path)
+        except ValueError:
+            logger.error(f"Invalid backup path: {backup_file} is outside allowed directory {allowed_base}")
+            raise BitwardenError(f"Invalid backup path: must be within {allowed_base}")
+
+        # Validate filename contains only safe characters
+        filename = backup_path.name
+        if not re.match(r'^[a-zA-Z0-9._-]+$', filename):
+            logger.error(f"Invalid backup filename: {filename} contains unsafe characters")
+            raise BitwardenError("Invalid backup filename: only alphanumeric, dots, dashes, and underscores allowed")
+
+        # Validate file extension
+        if not filename.endswith('.enc'):
+            logger.error(f"Invalid backup filename: {filename} must end with .enc")
+            raise BitwardenError("Invalid backup filename: must end with .enc")
+
+        return str(backup_path)
+
+    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"):
         """Exports using Bitwarden's built-in encryption."""
-        logger.info(f"Exporting with Bitwarden encryption to {backup_file}...")
+        # Validate backup path
+        validated_path = self._validate_backup_path(backup_file, allowed_dir)
+
+        logger.info(f"Exporting with Bitwarden encryption...")
         self._run(
-            cmd=["export", "--output", backup_file, "--format", "json", "--password", file_pw],
+            cmd=["export", "--output", validated_path, "--format", "json", "--password", file_pw],
             capture_json=False,
         )
 
-
-    def export_raw_encrypted(self, backup_file: str, file_pw: str):
+    def export_raw_encrypted(self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"):
         """Exports raw data and encrypts it in-memory."""
+        # Validate backup path
+        validated_path = self._validate_backup_path(backup_file, allowed_dir)
+
         logger.info(f"Exporting raw data from Bitwarden...")
-        raw_json = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=True)
-        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
-        with open(backup_file, "wb") as f:
+        # Get raw JSON string (not parsed)
+        raw_json_str = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=False)
+        encrypted_data = self.encrypt_data(raw_json_str.encode("utf-8"), file_pw)
+
+        with open(validated_path, "wb") as f:
             f.write(encrypted_data)
