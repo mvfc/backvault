@@ -113,6 +113,9 @@ class BitwardenClient:
                     pass
                 else:
                     logger.error(f"Bitwarden CLI error configuring server")
+                    logger.error(f"Return code: {e.returncode}")
+                    logger.error(f"stdout: {e.stdout}")
+                    logger.error(f"stderr: {e.stderr}")
                     raise BitwardenError(f"Failed to configure BW server") from e
             except Exception as e:
                 try:
@@ -154,6 +157,9 @@ class BitwardenClient:
             )
         except subprocess.CalledProcessError as e:
             logger.error(f"Bitwarden CLI command failed with exit code {e.returncode}")
+            logger.error(f"stdout: {e.stdout}")
+            logger.error(f"stderr: {e.stderr}")
+            logger.error(f"Command: {' '.join(safe_cmd)}")
             raise BitwardenError(f"Bitwarden CLI command failed") from e
 
         output = result.stdout.strip()
@@ -229,6 +235,10 @@ class BitwardenClient:
                 )
             except subprocess.CalledProcessError as e:
                 logger.error(f"Bitwarden CLI login failed")
+                logger.error(f"Return code: {e.returncode}")
+                logger.error(f"stdout: {e.stdout}")
+                logger.error(f"stderr: {e.stderr}")
+                logger.error(f"Command: {' '.join(cmd)}")
                 try:
                     self.logout()
                 except Exception:
@@ -267,6 +277,12 @@ class BitwardenClient:
             )
         except subprocess.CalledProcessError as e:
             logger.error(f"Bitwarden CLI unlock failed. Logging out.")
+            logger.error(f"Return code: {e.returncode}")
+            logger.error(f"stdout: {e.stdout}")
+            logger.error(f"stderr: {e.stderr}")
+            # Don't log the password in the command
+            safe_cmd = [self.bw_cmd, "unlock", "***REDACTED***", "--raw"]
+            logger.error(f"Command: {' '.join(safe_cmd)}")
             try:
                 self.logout()
             except Exception:

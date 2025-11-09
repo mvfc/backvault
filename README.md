@@ -275,15 +275,26 @@ docker pull --platform linux/arm64 ghcr.io/yourusername/backvault:latest
 
 ### Building Locally
 
-If you need to build locally (for development):
+**Important**: If building on macOS, see [BUILD.md](BUILD.md) for detailed platform-specific instructions.
 
+**On macOS (for Linux deployment):**
 ```bash
-# Single architecture build
-docker build -t backvault:local .
+# Always specify target platform when building on Mac
+docker build --platform linux/amd64 -t backvault:local .
+```
 
-# Multi-architecture build (requires buildx)
+**On Linux:**
+```bash
+# No --platform flag needed (auto-detects)
+docker build -t backvault:local .
+```
+
+**Multi-architecture build (requires buildx):**
+```bash
 docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t backvault:local .
 ```
+
+For comprehensive build documentation including troubleshooting, see **[BUILD.md](BUILD.md)**.
 
 ---
 

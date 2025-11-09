@@ -252,9 +252,16 @@ If it does:
 
 1. **Always test locally first:**
    ```bash
+   # On macOS - specify target platform
+   docker build --platform linux/amd64 -t backvault:test .
+   # On Linux - auto-detects
    docker build -t backvault:test .
+
+   # Test the image
    docker run --security-opt seccomp=unconfined backvault:test
    ```
+
+   **Note:** For detailed build instructions, see [BUILD.md](../BUILD.md).
 
 2. **Use semantic versioning:**
    - Major: Breaking changes

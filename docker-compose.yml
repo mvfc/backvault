@@ -7,7 +7,11 @@ services:
     image: ghcr.io/yourusername/backvault:latest
 
     # OR: Build locally (uncomment the line below and comment out 'image' above)
-    # build: .
+    # IMPORTANT: On macOS, you MUST specify the platform. See BUILD.md for details.
+    # build:
+    #   context: .
+    #   platforms:
+    #     - linux/amd64
 
     container_name: backvault
     restart: unless-stopped

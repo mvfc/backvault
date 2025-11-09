@@ -140,6 +140,7 @@ Building for platform: linux/amd64
 Target architecture: amd64
 Installing Bitwarden CLI version: 2024.10.2
 Downloading for architecture: x86_64
+Downloading: https://github.com/bitwarden/clients/releases/download/cli-v2024.10.2/bw-linux-x86_64-2024.10.2.zip
 ```
 
 ### Test the Built Image

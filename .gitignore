@@ -3,6 +3,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 backup/
+backups/
 logs/
 decrypt.py
 .vscode/

@@ -1,6 +1,23 @@
 FROM python:3.12-slim-bookworm
 
-# Docker automatically provides these build arguments for multi-platform builds
+# ============================================================================
+# Multi-Platform Build Configuration
+# ============================================================================
+# Docker automatically provides these build arguments when using --platform
+# or when building with buildx for multiple architectures.
+#
+# TARGETPLATFORM: Full platform string (e.g., "linux/amd64", "linux/arm64")
+# TARGETARCH: Architecture component (e.g., "amd64", "arm64", "arm")
+# TARGETVARIANT: Architecture variant (e.g., "v7" for arm/v7)
+#
+# These are used to download the correct Bitwarden CLI binary for the
+# target platform, not the build host platform.
+#
+# Example usage:
+#   docker build --platform linux/amd64 -t backvault:latest .
+#
+# See BUILD.md for detailed platform-specific build instructions.
+# ============================================================================
 ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
@@ -46,8 +63,9 @@ RUN set -eux; \
     echo "Downloading for architecture: ${ARCH_SUFFIX}"; \
     \
     # Download the architecture-specific binary from GitHub releases
-    curl -fsSL "https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${BW_VERSION}.zip" -o bw.zip || \
-    curl -fsSL "https://vault.bitwarden.com/download/?app=cli&platform=linux" -o bw.zip; \
+    # Bitwarden CLI provides separate binaries for each architecture
+    curl -fsSL "https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${ARCH_SUFFIX}-${BW_VERSION}.zip" -o bw.zip || \
+    curl -fsSL "https://vault.bitwarden.com/download/?app=cli&platform=linux&arch=${ARCH_SUFFIX}" -o bw.zip; \
     \
     unzip bw.zip -d /usr/local/bin; \
     chmod +x /usr/local/bin/bw; \
