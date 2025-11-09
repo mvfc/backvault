@@ -245,8 +245,10 @@ class BitwardenClient:
                     pass
                 raise BitwardenError("Bitwarden CLI login failed") from e
 
-            self.session = result.stdout.strip()
-            logger.info("Logged in successfully")
+            # API key login doesn't return a session token - that comes from unlock
+            logger.info(f"Logged in successfully via API key")
+            logger.debug(f"Login output: {result.stdout.strip()}")
+            # Don't set self.session here - it will be set by unlock()
 
         else:
             logger.info("Logging in via email/password")
@@ -258,6 +260,7 @@ class BitwardenClient:
             self.session = self._run(cmd, capture_json=False)
             logger.info("Logged in successfully")
 
+        # Note: For API key login, session will be None until unlock() is called
         return self.session
 
     @retry_with_backoff(max_attempts=3, base_delay=2.0)
@@ -268,7 +271,9 @@ class BitwardenClient:
         Retries up to 3 times with exponential backoff on failure.
         """
         env = os.environ.copy()
-        env["BW_SESSION"] = self.session
+        # Only set BW_SESSION if we have a valid session (not the case after API key login)
+        if self.session:
+            env["BW_SESSION"] = self.session
 
         cmd = [self.bw_cmd, "unlock", password, "--raw"]
         try:
