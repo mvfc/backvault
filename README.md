@@ -20,7 +20,12 @@ It’s designed for hands-free, secure, and automated backups using the official
 ## 📦 Quick Start (Docker)
 
 You can run BackVault directly using the **published Docker image**, no build required.
-You can use either the github registry image (ghcr.io/mvfc/backvault) or the Docker Hub image (mvflc/backvault).
+
+**Available Images:**
+- GitHub Container Registry: `ghcr.io/yourusername/backvault:latest`
+- Multi-architecture support: amd64, arm64, arm/v7 (Raspberry Pi compatible)
+
+**Note:** Replace `yourusername` with your GitHub username after the first successful build.
 
 ```bash
 docker run -d \
@@ -227,7 +232,7 @@ if __name__ == "__main__":
 To update to the latest version:
 
 ```bash
-docker pull ghcr.io/mvfc/backvault:latest
+docker pull ghcr.io/yourusername/backvault:latest
 ```
 
 If using docker compose:
@@ -235,6 +240,61 @@ If using docker compose:
 docker compose pull
 docker compose up -d
 ```
+
+---
+
+## 🔄 CI/CD and Multi-Architecture Builds
+
+BackVault uses GitHub Actions for automated building and publishing:
+
+### Automated Workflows
+
+- **Docker Publish**: Builds and publishes multi-arch images on merge to main
+- **Security Scan**: Weekly vulnerability scanning with Trivy and Bandit
+- **Test**: Runs linting and build tests on all PRs
+
+### Supported Architectures
+
+Images are automatically built for:
+- `linux/amd64` - Standard x86_64 systems
+- `linux/arm64` - ARM64 systems (Apple Silicon M1/M2, AWS Graviton)
+- `linux/arm/v7` - 32-bit ARM (Raspberry Pi 2+)
+
+### Using Specific Versions
+
+```bash
+# Use latest version
+docker pull ghcr.io/yourusername/backvault:latest
+
+# Use specific version
+docker pull ghcr.io/yourusername/backvault:v1.0.0
+
+# Use specific architecture
+docker pull --platform linux/arm64 ghcr.io/yourusername/backvault:latest
+```
+
+### Building Locally
+
+**Important**: If building on macOS, see [BUILD.md](BUILD.md) for detailed platform-specific instructions.
+
+**On macOS (for Linux deployment):**
+```bash
+# Always specify target platform when building on Mac
+docker build --platform linux/amd64 -t backvault:local .
+```
+
+**On Linux:**
+```bash
+# No --platform flag needed (auto-detects)
+docker build -t backvault:local .
+```
+
+**Multi-architecture build (requires buildx):**
+```bash
+docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t backvault:local .
+```
+
+For comprehensive build documentation including troubleshooting, see **[BUILD.md](BUILD.md)**.
 
 ---
 

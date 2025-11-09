@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backvault:
+    # Use published image from GitHub Container Registry
+    # Replace 'yourusername' with your GitHub username
+    image: ghcr.io/yourusername/backvault:latest
+
+    # OR: Build locally (uncomment the line below and comment out 'image' above)
+    # IMPORTANT: On macOS, you MUST specify the platform. See BUILD.md for details.
+    # build:
+    #   context: .
+    #   platforms:
+    #     - linux/amd64
+
+    container_name: backvault
+    restart: unless-stopped
+
+    # REQUIRED: Bitwarden CLI needs this to run
+    security_opt:
+      - seccomp=unconfined
+
+    environment:
+      # Required credentials
+      BW_CLIENT_ID: "${BW_CLIENT_ID}"
+      BW_CLIENT_SECRET: "${BW_CLIENT_SECRET}"
+      BW_PASSWORD: "${BW_PASSWORD}"
+      BW_SERVER: "${BW_SERVER}"
+      BW_FILE_PASSWORD: "${BW_FILE_PASSWORD}"
+
+      # Optional configuration
+      BACKUP_ENCRYPTION_MODE: "${BACKUP_ENCRYPTION_MODE:-raw}"
+      BACKUP_INTERVAL_HOURS: "${BACKUP_INTERVAL_HOURS:-12}"
+      RETAIN_DAYS: "${RETAIN_DAYS:-7}"
+
+      # Uncomment if using self-signed certificates
+      # NODE_TLS_REJECT_UNAUTHORIZED: 0
+
+    volumes:
+      - ./backups:/app/backups
+
+    # Optional: Limit resource usage
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 256M
