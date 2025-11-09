@@ -79,13 +79,16 @@ RUN apt-get remove -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user and group
+# Create non-root user and group with home directory
 RUN groupadd -r backvault && \
-    useradd -r -g backvault -u 1000 backvault && \
+    useradd -r -g backvault -u 1000 -m -d /home/backvault backvault && \
     mkdir -p /app/backups /var/log && \
-    chown -R backvault:backvault /app /var/log
+    chown -R backvault:backvault /app /var/log /home/backvault
 
 WORKDIR /app
+
+# Set HOME environment variable for the backvault user
+ENV HOME=/home/backvault
 
 # Copy application files
 COPY --chown=backvault:backvault ./src /app/
