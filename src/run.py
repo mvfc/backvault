@@ -36,10 +36,13 @@ def validate_backup_dir(backup_dir: str) -> str:
     try:
         backup_path.relative_to(allowed_base)
     except ValueError:
-        logger.critical(f"BACKUP_DIR '{backup_dir}' is outside allowed path '{ALLOWED_BASE}'")
+        logger.critical(
+            f"BACKUP_DIR '{backup_dir}' is outside allowed path '{ALLOWED_BASE}'"
+        )
         sys.exit(1)
 
     return str(backup_path)
+
 
 def main():
     # Vault access information
@@ -108,7 +111,7 @@ def main():
             elif encryption_mode == "bitwarden":
                 source.export_bitwarden_encrypted(backup_file, file_pw, backup_dir)
 
-            logger.info(f"Export completed successfully.")
+            logger.info("Export completed successfully.")
         except Exception as e:
             logger.error(f"Export failed: {e}")
             sys.exit(1)

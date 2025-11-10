@@ -21,13 +21,11 @@ ENCRYPTION_VERSION = 1  # File format version for future compatibility
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
-    handlers=[
-        logging.FileHandler("/var/log/cron.log"),
-        logging.StreamHandler(stdout)
-    ]
+    handlers=[logging.FileHandler("/var/log/cron.log"), logging.StreamHandler(stdout)],
 )
 
 logger = logging.getLogger(__name__)
+
 
 class BitwardenError(Exception):
     """Base exception for Bitwarden wrapper."""
@@ -35,7 +33,9 @@ class BitwardenError(Exception):
     pass
 
 
-def retry_with_backoff(max_attempts: int = 3, base_delay: float = 2.0, max_delay: float = 30.0):
+def retry_with_backoff(
+    max_attempts: int = 3, base_delay: float = 2.0, max_delay: float = 30.0
+):
     """
     Decorator to retry a function with exponential backoff on BitwardenError.
 
@@ -43,6 +43,7 @@ def retry_with_backoff(max_attempts: int = 3, base_delay: float = 2.0, max_delay
     :param base_delay: Initial delay in seconds (doubles with each retry)
     :param max_delay: Maximum delay between retries in seconds
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -54,10 +55,12 @@ def retry_with_backoff(max_attempts: int = 3, base_delay: float = 2.0, max_delay
                     last_exception = e
                     if attempt == max_attempts - 1:
                         # Last attempt failed, re-raise
-                        logger.error(f"{func.__name__} failed after {max_attempts} attempts")
+                        logger.error(
+                            f"{func.__name__} failed after {max_attempts} attempts"
+                        )
                         raise
                     # Calculate delay with exponential backoff
-                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    delay = min(base_delay * (2**attempt), max_delay)
                     logger.warning(
                         f"{func.__name__} attempt {attempt + 1}/{max_attempts} failed: {e}. "
                         f"Retrying in {delay:.1f} seconds..."
@@ -65,7 +68,9 @@ def retry_with_backoff(max_attempts: int = 3, base_delay: float = 2.0, max_delay
                     time.sleep(delay)
             # Should not reach here, but just in case
             raise last_exception
+
         return wrapper
+
     return decorator
 
 
@@ -112,17 +117,17 @@ class BitwardenClient:
                 if e.returncode == 1:
                     pass
                 else:
-                    logger.error(f"Bitwarden CLI error configuring server")
+                    logger.error("Bitwarden CLI error configuring server")
                     logger.error(f"Return code: {e.returncode}")
                     logger.error(f"stdout: {e.stdout}")
                     logger.error(f"stderr: {e.stderr}")
-                    raise BitwardenError(f"Failed to configure BW server") from e
+                    raise BitwardenError("Failed to configure BW server") from e
             except Exception as e:
                 try:
                     self.logout()
                 except Exception:
                     pass
-                raise BitwardenError(f"Failed to configure BW server") from e
+                raise BitwardenError("Failed to configure BW server") from e
 
     def __enter__(self):
         self.login()
@@ -160,14 +165,14 @@ class BitwardenClient:
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
             logger.error(f"Command: {' '.join(safe_cmd)}")
-            raise BitwardenError(f"Bitwarden CLI command failed") from e
+            raise BitwardenError("Bitwarden CLI command failed") from e
 
         output = result.stdout.strip()
         if capture_json:
             try:
                 return json.loads(output)
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON output from Bitwarden CLI")
+                logger.error("Failed to parse JSON output from Bitwarden CLI")
                 raise BitwardenError("Failed to parse JSON output") from e
         else:
             return output
@@ -234,7 +239,7 @@ class BitwardenClient:
                     cmd, capture_output=True, text=True, check=True, env=env
                 )
             except subprocess.CalledProcessError as e:
-                logger.error(f"Bitwarden CLI login failed")
+                logger.error("Bitwarden CLI login failed")
                 logger.error(f"Return code: {e.returncode}")
                 logger.error(f"stdout: {e.stdout}")
                 logger.error(f"stderr: {e.stderr}")
@@ -246,7 +251,7 @@ class BitwardenClient:
                 raise BitwardenError("Bitwarden CLI login failed") from e
 
             # API key login doesn't return a session token - that comes from unlock
-            logger.info(f"Logged in successfully via API key")
+            logger.info("Logged in successfully via API key")
             logger.debug(f"Login output: {result.stdout.strip()}")
             # Don't set self.session here - it will be set by unlock()
 
@@ -281,7 +286,7 @@ class BitwardenClient:
                 cmd, capture_output=True, text=True, check=True, env=env
             )
         except subprocess.CalledProcessError as e:
-            logger.error(f"Bitwarden CLI unlock failed. Logging out.")
+            logger.error("Bitwarden CLI unlock failed. Logging out.")
             logger.error(f"Return code: {e.returncode}")
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
@@ -297,7 +302,7 @@ class BitwardenClient:
         self.session = result.stdout.strip()
         logger.info("Vault unlocked successfully")
         return self.session
-    
+
     def encrypt_data(self, data: bytes, password: str) -> bytes:
         """
         Encrypts data using AES-256-GCM with a key derived from the password.
@@ -311,7 +316,7 @@ class BitwardenClient:
         logger.info("Encrypting data in-memory...")
 
         # Add version header for future compatibility
-        version = ENCRYPTION_VERSION.to_bytes(4, byteorder='big')
+        version = ENCRYPTION_VERSION.to_bytes(4, byteorder="big")
 
         salt = os.urandom(SALT_SIZE)
 
@@ -332,8 +337,9 @@ class BitwardenClient:
         logger.info("Encryption successful.")
         return version + salt + nonce + ciphertext
 
-
-    def _validate_backup_path(self, backup_file: str, allowed_base: str = "/app/backups") -> str:
+    def _validate_backup_path(
+        self, backup_file: str, allowed_base: str = "/app/backups"
+    ) -> str:
         """
         Validate that the backup file path is within the allowed directory.
         Prevents path traversal attacks.
@@ -347,41 +353,61 @@ class BitwardenClient:
         try:
             backup_path.relative_to(allowed_path)
         except ValueError:
-            logger.error(f"Invalid backup path: {backup_file} is outside allowed directory {allowed_base}")
+            logger.error(
+                f"Invalid backup path: {backup_file} is outside allowed directory {allowed_base}"
+            )
             raise BitwardenError(f"Invalid backup path: must be within {allowed_base}")
 
         # Validate filename contains only safe characters
         filename = backup_path.name
-        if not re.match(r'^[a-zA-Z0-9._-]+$', filename):
-            logger.error(f"Invalid backup filename: {filename} contains unsafe characters")
-            raise BitwardenError("Invalid backup filename: only alphanumeric, dots, dashes, and underscores allowed")
+        if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
+            logger.error(
+                f"Invalid backup filename: {filename} contains unsafe characters"
+            )
+            raise BitwardenError(
+                "Invalid backup filename: only alphanumeric, dots, dashes, and underscores allowed"
+            )
 
         # Validate file extension
-        if not filename.endswith('.enc'):
+        if not filename.endswith(".enc"):
             logger.error(f"Invalid backup filename: {filename} must end with .enc")
             raise BitwardenError("Invalid backup filename: must end with .enc")
 
         return str(backup_path)
 
-    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"):
+    def export_bitwarden_encrypted(
+        self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"
+    ):
         """Exports using Bitwarden's built-in encryption."""
         # Validate backup path
         validated_path = self._validate_backup_path(backup_file, allowed_dir)
 
-        logger.info(f"Exporting with Bitwarden encryption...")
+        logger.info("Exporting with Bitwarden encryption...")
         self._run(
-            cmd=["export", "--output", validated_path, "--format", "json", "--password", file_pw],
+            cmd=[
+                "export",
+                "--output",
+                validated_path,
+                "--format",
+                "json",
+                "--password",
+                file_pw,
+            ],
             capture_json=False,
         )
 
-    def export_raw_encrypted(self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"):
+    def export_raw_encrypted(
+        self, backup_file: str, file_pw: str, allowed_dir: str = "/app/backups"
+    ):
         """Exports raw data and encrypts it in-memory."""
         # Validate backup path
         validated_path = self._validate_backup_path(backup_file, allowed_dir)
 
-        logger.info(f"Exporting raw data from Bitwarden...")
+        logger.info("Exporting raw data from Bitwarden...")
         # Get raw JSON string (not parsed)
-        raw_json_str = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=False)
+        raw_json_str = self._run(
+            cmd=["export", "--format", "json", "--raw"], capture_json=False
+        )
         encrypted_data = self.encrypt_data(raw_json_str.encode("utf-8"), file_pw)
 
         with open(validated_path, "wb") as f:

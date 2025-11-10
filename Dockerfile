@@ -99,9 +99,24 @@ COPY --chown=backvault:backvault requirements.txt /app/requirements.txt
 # Set execute permissions on scripts
 RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 
+# Install build dependencies needed for cryptography package
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install --no-input --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt
+
+# Remove build dependencies to keep image size small
+RUN apt-get remove -y \
+    gcc \
+    libffi-dev \
+    libssl-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Switch to non-root user
 USER backvault
