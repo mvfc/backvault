@@ -16,6 +16,9 @@ services:
     container_name: backvault
     restart: unless-stopped
 
+    # Run as current user to avoid permission issues with mounted volumes
+    user: "${UID:-1000}:${GID:-1000}"
+
     # REQUIRED: Bitwarden CLI needs this to run
     security_opt:
       - seccomp=unconfined

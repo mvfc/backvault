@@ -7,12 +7,14 @@ It’s designed for hands-free, secure, and automated backups using the official
 
 ## 🚀 Features
 
-- 🔒 Securely exports your vault using your Bitwarden credentials  
-- 🕐 Supports both **interval-based** and **cron-based** backup scheduling  
-- 💾 Password-protected backup files using AES encryption  
-- 🧹 **Automated Cleanup**: Automatically deletes old backups based on a configurable retention period.
-- ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
-- 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden  
+- 🔒 Securely exports your vault using your Bitwarden credentials
+- 🕐 **Interval-based backup scheduling** — configure backup frequency in hours
+- 💾 Password-protected backup files using AES encryption
+- 🧹 **Automated Cleanup**: Automatically deletes old backups daily at midnight based on configurable retention period
+- ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format
+- 🔐 **Security Hardened**: Non-root execution, log redaction, retry logic with exponential backoff
+- 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden
+- 🏗️ **Multi-Architecture Support**: Native images for amd64, arm64, and arm/v7 (Raspberry Pi)
 - 🐳 Runs fully containerized — no setup or local dependencies required
 
 ---
@@ -22,10 +24,8 @@ It’s designed for hands-free, secure, and automated backups using the official
 You can run BackVault directly using the **published Docker image**, no build required.
 
 **Available Images:**
-- GitHub Container Registry: `ghcr.io/yourusername/backvault:latest`
+- GitHub Container Registry: `ghcr.io/tgrecojr/backvault:latest`
 - Multi-architecture support: amd64, arm64, arm/v7 (Raspberry Pi compatible)
-
-**Note:** Replace `yourusername` with your GitHub username after the first successful build.
 
 ```bash
 docker run -d \
@@ -38,8 +38,11 @@ docker run -d \
   -e BACKUP_ENCRYPTION_MODE="raw" \
   -e BACKUP_INTERVAL_HOURS=12 \
   -v /path/to/backup:/app/backups \
-  ghcr.io/mvfc/backvault:latest
+  --security-opt seccomp=unconfined \
+  ghcr.io/tgrecojr/backvault:latest
 ```
+
+> ⚠️ **Security Requirement**: The `--security-opt seccomp=unconfined` flag is **required** for the Bitwarden CLI to function properly inside the container.
 
 > 🔑 **Important**: The container uses the official Bitwarden CLI internally.
 > Your credentials are only used to generate the export — they are **never stored** persistently and **never sent** anywhere else.
@@ -53,9 +56,17 @@ Here’s how to set it up with Docker Compose for easy management:
 ```yaml
 services:
   backvault:
-    image: ghcr.io/mvfc/backvault:latest
+    image: ghcr.io/tgrecojr/backvault:latest
     container_name: backvault
     restart: unless-stopped
+
+    # Run as current user to avoid permission issues with mounted volumes
+    user: "${UID:-1000}:${GID:-1000}"
+
+    # REQUIRED: Bitwarden CLI needs this to run
+    security_opt:
+      - seccomp=unconfined
+
     environment:
       BW_CLIENT_ID: "your_client_id"
       BW_CLIENT_SECRET: "your_client_secret"
@@ -64,7 +75,11 @@ services:
       BW_FILE_PASSWORD: "backup_encryption_password"
       BACKUP_ENCRYPTION_MODE: "raw" # Use 'bitwarden' for the default format
       BACKUP_INTERVAL_HOURS: 12
-      NODE_TLS_REJECT_UNAUTHORIZED: 0
+      RETAIN_DAYS: 7
+
+      # Uncomment if using self-signed certificates
+      # NODE_TLS_REJECT_UNAUTHORIZED: 0
+
     volumes:
       - ./backups:/app/backups
 ```
@@ -87,18 +102,54 @@ BackVault will automatically:
 
 ## ⚙️ Configuration
 
-| Variable                       | Description                                    | Required | Example                     |
-| ------------------------------ | ---------------------------------------------- | -------- | --------------------------- |
-| `BW_CLIENT_ID`                 | Bitwarden client ID for API authentication     | ✅        | `xxxx-xxxx-xxxx-xxxx`       |
-| `BW_CLIENT_SECRET`             | Bitwarden client secret                        | ✅        | `your_client_secret`        |
-| `BW_PASSWORD`                  | Master password for your vault                 | ✅        | `supersecret`               |
-| `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | `https://vault.example.com` |
-| `BW_FILE_PASSWORD`             | Password to encrypt exported backup file       | ✅        | `strong_backup_password`    |
-| `BACKUP_INTERVAL_HOURS`        | Alternative to cron expression (integer hours) | ❌        | `12`                        |
-| `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. | ❌ | `raw` |
-| `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
-| `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
-| `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
+| Variable                       | Description                                    | Required | Default | Example                     |
+| ------------------------------ | ---------------------------------------------- | -------- | ------- | --------------------------- |
+| `BW_CLIENT_ID`                 | Bitwarden client ID for API authentication     | ✅        | -       | `xxxx-xxxx-xxxx-xxxx`       |
+| `BW_CLIENT_SECRET`             | Bitwarden client secret                        | ✅        | -       | `your_client_secret`        |
+| `BW_PASSWORD`                  | Master password for your vault                 | ✅        | -       | `supersecret`               |
+| `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | -       | `https://vault.example.com` |
+| `BW_FILE_PASSWORD`             | Password to encrypt exported backup file       | ✅        | -       | `strong_backup_password`    |
+| `BACKUP_INTERVAL_HOURS`        | Backup frequency in hours                      | ❌        | `12`    | `12`                        |
+| `BACKUP_ENCRYPTION_MODE`       | `bitwarden` or `raw` (portable AES-256-GCM)    | ❌        | `bitwarden` | `raw`                   |
+| `BACKUP_DIR`                   | Directory path for storing backups             | ❌        | `/app/backups` | `/app/backups`         |
+| `RETAIN_DAYS`                  | Days to keep backups. Set to `0` to disable cleanup | ❌  | `7`     | `7`                         |
+| `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` **only** if using self-signed certificates | ❌ | `1` | `0`                         |
+
+---
+
+## 🔒 Security Considerations
+
+### Master Password Storage
+
+**Important**: BackVault requires your Bitwarden master password (`BW_PASSWORD`) to unlock and export your vault. This is a fundamental requirement of the Bitwarden CLI and cannot be avoided.
+
+**Current Implementation:**
+- Password is passed via environment variable
+- Never logged or stored persistently
+- Redacted from all log output
+- Vault is locked immediately after each backup
+
+**⚠️ Security Risks:**
+- Environment variables are visible in `docker inspect <container>`
+- May appear in container orchestration logs
+- Stored in plain text in docker-compose.yml files
+
+**Recommendations:**
+1. **For production use**, consider using Docker Secrets or Kubernetes Secrets instead of environment variables
+2. Store your `docker-compose.yml` and `.env` files securely with appropriate file permissions
+3. Use a dedicated backup password (`BW_FILE_PASSWORD`) different from your master password
+4. Regularly rotate your API keys and passwords
+5. Limit access to the backup directory with proper file system permissions
+
+> 📋 **Note**: There is an open issue to add support for file-based secrets (e.g., `BW_PASSWORD_FILE`) as a more secure alternative. See the GitHub issues for details.
+
+### Additional Security Features
+
+- **Non-root execution**: Container runs as UID 1000 by default (configurable via `user:` in docker-compose)
+- **Automated logout**: Session is terminated immediately after each backup
+- **Retry logic**: Implements exponential backoff to prevent account lockouts
+- **Strong encryption**: AES-256-GCM with PBKDF2 (600,000 iterations) for raw mode backups
+- **Security audited**: See [SECURITYASSESS.md](SECURITYASSESS.md) for detailed security assessment
 
 ---
 
@@ -221,9 +272,12 @@ if __name__ == "__main__":
 
 ## 🧠 Tips
 
-* Store `BW_FILE_PASSWORD` securely — it’s required for restoring backups.
-* You can run this container alongside Vaultwarden on the same host or a separate machine.
-* Combine with tools like `restic` or `rclone` to push backups to cloud storage.
+* **Store `BW_FILE_PASSWORD` securely** — it's required for restoring backups and cannot be recovered if lost
+* You can run this container alongside Vaultwarden on the same host or a separate machine
+* Combine with tools like `restic` or `rclone` to push backups to cloud storage for offsite protection
+* Test your backup restoration process periodically to ensure you can recover your data
+* The container performs an initial backup immediately on startup, then follows the configured interval
+* Cleanup runs automatically at midnight each day (container time), deleting backups older than `RETAIN_DAYS`
 
 ---
 
@@ -232,7 +286,7 @@ if __name__ == "__main__":
 To update to the latest version:
 
 ```bash
-docker pull ghcr.io/yourusername/backvault:latest
+docker pull ghcr.io/tgrecojr/backvault:latest
 ```
 
 If using docker compose:
@@ -264,13 +318,13 @@ Images are automatically built for:
 
 ```bash
 # Use latest version
-docker pull ghcr.io/yourusername/backvault:latest
+docker pull ghcr.io/tgrecojr/backvault:latest
 
-# Use specific version
-docker pull ghcr.io/yourusername/backvault:v1.0.0
+# Use specific version (when tagged)
+docker pull ghcr.io/tgrecojr/backvault:v1.0.0
 
 # Use specific architecture
-docker pull --platform linux/arm64 ghcr.io/yourusername/backvault:latest
+docker pull --platform linux/arm64 ghcr.io/tgrecojr/backvault:latest
 ```
 
 ### Building Locally
@@ -305,10 +359,20 @@ See LICENSE for details.
 
 ---
 
+## 📚 Additional Documentation
+
+- **[BUILD.md](BUILD.md)** - Platform-specific build instructions and troubleshooting
+- **[SECURITYASSESS.md](SECURITYASSESS.md)** - Comprehensive security assessment and audit results
+- **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** - Guidelines for contributing to the project
+
+---
+
 ## 🤝 Contributing
 
 Pull requests and issue reports are welcome!
 Feel free to open a PR or discussion on GitHub.
+
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
 
 ---
 
