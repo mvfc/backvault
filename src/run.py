@@ -36,10 +36,13 @@ def validate_backup_dir(backup_dir: str) -> str:
     try:
         backup_path.relative_to(allowed_base)
     except ValueError:
-        logger.critical(f"BACKUP_DIR '{backup_dir}' is outside allowed path '{ALLOWED_BASE}'")
+        logger.critical(
+            f"BACKUP_DIR '{backup_dir}' is outside allowed path '{ALLOWED_BASE}'"
+        )
         sys.exit(1)
 
     return str(backup_path)
+
 
 def main():
     # Vault access information
