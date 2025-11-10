@@ -1,7 +1,8 @@
 import os
-import subprocess
+from subprocess import CalledProcessError, run as sprun
 import json
 import logging
+import re
 from typing import Any
 from sys import stdout
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -16,13 +17,13 @@ PBKDF2_ITERATIONS = 600000
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
-    handlers=[
-        logging.FileHandler("/var/log/cron.log"),
-        logging.StreamHandler(stdout)
-    ]
+    handlers=[logging.StreamHandler(stdout)],
 )
 
 logger = logging.getLogger(__name__)
+
+password_regex = re.compile(r"('--password',\s*)('[^']*')(\s*]')", re.IGNORECASE)
+
 
 class BitwardenError(Exception):
     """Base exception for Bitwarden wrapper."""
@@ -61,7 +62,7 @@ class BitwardenClient:
             logger.debug(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
             try:
-                subprocess.run(
+                sprun(
                     [self.bw_cmd, "config", "server", server],
                     text=True,
                     capture_output=True,
@@ -69,7 +70,7 @@ class BitwardenClient:
                     env=env,
                     preexec_fn=None,  # Disable process group creation
                 )
-            except subprocess.CalledProcessError as e:
+            except CalledProcessError as e:
                 if e.returncode == 1:
                     pass
                 else:
@@ -89,29 +90,55 @@ class BitwardenClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.logout()
 
-    def _run(self, cmd: list[str], capture_json: bool = True) -> Any:
+    def _run(
+        self,
+        cmd: list[str],
+        capture_json: bool = True,
+        text: bool = True,
+        capture_output: bool = True,
+        check: bool = True,
+        env=os.environ.copy(),
+    ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         """
-        env = os.environ.copy()
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
         logger.debug(f"Running command: {' '.join(full_cmd)}")
-        result = subprocess.run(
-            full_cmd,
-            text=True,
-            capture_output=True,
-            check=True,
-            env=env,
-            preexec_fn=None,  # Disable process group creation
-        )
+        try:
+            result = sprun(
+                full_cmd,
+                text=text,
+                capture_output=capture_output,
+                check=check,
+                env=env,
+            )
+        except CalledProcessError as e:
+            masked_e = password_regex.sub("('--password', '****')]", e.__str__())
+            logger.error(f"Failed to run command: {masked_e}")
+            try:
+                sprun(
+                    [self.bw_cmd, "logout"],
+                    text=text,
+                    capture_output=capture_output,
+                    check=True,
+                    env=env,
+                )
+            except CalledProcessError as inner_e:
+                masked_inner_e = password_regex.sub("('--password', '****')]", inner_e.__str__())
+                logger.error(f"Failed to log out after error. Failure: {masked_inner_e}")
+            raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
-            logger.error(f"Bitwarden CLI error: {result.stderr.strip()}")
-            raise BitwardenError(result.stderr.strip())
+            logger.error(
+                f"Bitwarden CLI error: {password_regex.sub("('--password', '****')]", result.stderr.strip())}"
+            )
+            raise BitwardenError(
+                password_regex.sub("('--password', '****')]", result.stderr.strip())
+            )
 
         output = result.stdout.strip()
         if capture_json:
@@ -151,22 +178,18 @@ class BitwardenClient:
             env["BW_CLIENTID"] = self.client_id
             env["BW_CLIENTSECRET"] = self.client_secret
 
-            cmd = [self.bw_cmd, "login", "--apikey"]
+            cmd = ["login", "--apikey"]
 
             # Run CLI
-            try:
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, check=True, env=env
-                )
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Bitwarden CLI login failed: {e.stderr.strip()}")
-                try:
-                    self.logout()
-                except:
-                    pass
-                raise BitwardenError(e.stderr.strip())
-
-            self.session = result.stdout.strip()
+            result = self._run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=env,
+                capture_json=False,
+            )
+            self.session = result
             logger.info("Logged in successfully")
 
         else:
@@ -189,22 +212,15 @@ class BitwardenClient:
         env = os.environ.copy()
         env["BW_SESSION"] = self.session
 
-        cmd = [self.bw_cmd, "unlock", password, "--raw"]
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, check=True, env=env
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Bitwarden CLI unlock failed: {e.stderr.strip()}. Logging out."
-            )
-            self.logout()
-            raise BitwardenError(e.stderr.strip())
+        cmd = ["unlock", password, "--raw"]
+        result = self._run(
+            cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
+        )
 
-        self.session = result.stdout.strip()
+        self.session = result
         logger.info("Vault unlocked successfully")
         return self.session
-    
+
     def encrypt_data(self, data: bytes, password: str) -> bytes:
         """
         Encrypts data using AES-256-GCM with a key derived from the password.
@@ -230,20 +246,28 @@ class BitwardenClient:
         logger.info("Encryption successful.")
         return salt + nonce + ciphertext
 
-
     def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
         """Exports using Bitwarden's built-in encryption."""
         logger.info(f"Exporting with Bitwarden encryption to {backup_file}...")
         self._run(
-            cmd=["export", "--output", backup_file, "--format", "json", "--password", file_pw],
+            cmd=[
+                "export",
+                "--output",
+                backup_file,
+                "--format",
+                "json",
+                "--password",
+                file_pw,
+            ],
             capture_json=False,
         )
-
 
     def export_raw_encrypted(self, backup_file: str, file_pw: str):
         """Exports raw data and encrypts it in-memory."""
         logger.info(f"Exporting raw data from Bitwarden...")
-        raw_json = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=True)
+        raw_json = self._run(
+            cmd=["export", "--format", "json", "--raw"], capture_json=True
+        )
         encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)

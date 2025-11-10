@@ -18,6 +18,7 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
 
+
 def main():
     # Vault access information
     client_id = require_env("BW_CLIENT_ID")
@@ -28,7 +29,7 @@ def main():
 
     # Configuration
     backup_dir = os.getenv("BACKUP_DIR", "/app/backups")
-    log_file = os.getenv("LOG_FILE") # Optional log file
+    log_file = os.getenv("LOG_FILE")  # Optional log file
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
 
     if log_file:
@@ -69,7 +70,9 @@ def main():
         elif encryption_mode == "bitwarden":
             source.export_bitwarden_encrypted(backup_file, file_pw)
         else:
-            logger.error(f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'.")
+            logger.error(
+                f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'."
+            )
             return
 
         logger.info(f"Export completed successfully to {backup_file}.")
