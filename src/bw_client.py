@@ -112,17 +112,17 @@ class BitwardenClient:
                 if e.returncode == 1:
                     pass
                 else:
-                    logger.error(f"Bitwarden CLI error configuring server")
+                    logger.error("Bitwarden CLI error configuring server")
                     logger.error(f"Return code: {e.returncode}")
                     logger.error(f"stdout: {e.stdout}")
                     logger.error(f"stderr: {e.stderr}")
-                    raise BitwardenError(f"Failed to configure BW server") from e
+                    raise BitwardenError("Failed to configure BW server") from e
             except Exception as e:
                 try:
                     self.logout()
                 except Exception:
                     pass
-                raise BitwardenError(f"Failed to configure BW server") from e
+                raise BitwardenError("Failed to configure BW server") from e
 
     def __enter__(self):
         self.login()
@@ -160,14 +160,14 @@ class BitwardenClient:
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
             logger.error(f"Command: {' '.join(safe_cmd)}")
-            raise BitwardenError(f"Bitwarden CLI command failed") from e
+            raise BitwardenError("Bitwarden CLI command failed") from e
 
         output = result.stdout.strip()
         if capture_json:
             try:
                 return json.loads(output)
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON output from Bitwarden CLI")
+                logger.error("Failed to parse JSON output from Bitwarden CLI")
                 raise BitwardenError("Failed to parse JSON output") from e
         else:
             return output
@@ -234,7 +234,7 @@ class BitwardenClient:
                     cmd, capture_output=True, text=True, check=True, env=env
                 )
             except subprocess.CalledProcessError as e:
-                logger.error(f"Bitwarden CLI login failed")
+                logger.error("Bitwarden CLI login failed")
                 logger.error(f"Return code: {e.returncode}")
                 logger.error(f"stdout: {e.stdout}")
                 logger.error(f"stderr: {e.stderr}")
@@ -246,7 +246,7 @@ class BitwardenClient:
                 raise BitwardenError("Bitwarden CLI login failed") from e
 
             # API key login doesn't return a session token - that comes from unlock
-            logger.info(f"Logged in successfully via API key")
+            logger.info("Logged in successfully via API key")
             logger.debug(f"Login output: {result.stdout.strip()}")
             # Don't set self.session here - it will be set by unlock()
 
