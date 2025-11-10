@@ -281,7 +281,7 @@ class BitwardenClient:
                 cmd, capture_output=True, text=True, check=True, env=env
             )
         except subprocess.CalledProcessError as e:
-            logger.error(f"Bitwarden CLI unlock failed. Logging out.")
+            logger.error("Bitwarden CLI unlock failed. Logging out.")
             logger.error(f"Return code: {e.returncode}")
             logger.error(f"stdout: {e.stdout}")
             logger.error(f"stderr: {e.stderr}")
