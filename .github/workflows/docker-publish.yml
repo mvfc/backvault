@@ -72,8 +72,8 @@ jobs:
             type=ref,event=branch
             # Tag with PR number
             type=ref,event=pr
-            # Tag with commit SHA
-            type=sha,prefix={{branch}}-
+            # Tag with commit SHA (only on branch pushes, not PRs)
+            type=sha,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=BackVault
             org.opencontainers.image.description=Automated Bitwarden/Vaultwarden backup tool
