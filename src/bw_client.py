@@ -368,7 +368,7 @@ class BitwardenClient:
         # Validate backup path
         validated_path = self._validate_backup_path(backup_file, allowed_dir)
 
-        logger.info(f"Exporting with Bitwarden encryption...")
+        logger.info("Exporting with Bitwarden encryption...")
         self._run(
             cmd=["export", "--output", validated_path, "--format", "json", "--password", file_pw],
             capture_json=False,
@@ -379,7 +379,7 @@ class BitwardenClient:
         # Validate backup path
         validated_path = self._validate_backup_path(backup_file, allowed_dir)
 
-        logger.info(f"Exporting raw data from Bitwarden...")
+        logger.info("Exporting raw data from Bitwarden...")
         # Get raw JSON string (not parsed)
         raw_json_str = self._run(cmd=["export", "--format", "json", "--raw"], capture_json=False)
         encrypted_data = self.encrypt_data(raw_json_str.encode("utf-8"), file_pw)

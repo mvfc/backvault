@@ -108,7 +108,7 @@ def main():
             elif encryption_mode == "bitwarden":
                 source.export_bitwarden_encrypted(backup_file, file_pw, backup_dir)
 
-            logger.info(f"Export completed successfully.")
+            logger.info("Export completed successfully.")
         except Exception as e:
             logger.error(f"Export failed: {e}")
             sys.exit(1)
