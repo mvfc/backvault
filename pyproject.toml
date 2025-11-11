@@ -3,6 +3,14 @@ name = "backvault"
 version = "0.1.0"
 description = "Bitwarden/Vaultwarden backup tool"
 requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=46.0.3",
+    "fastapi>=0.121.1",
+    "pip>=25.3",
+    "pysqlite3>=0.5.4",
+    "sqlcipher3>=0.5.4",
+    "sqlcipher3-binary>=0.5.4",
+]
 
 [dependency-groups]
 dev = [

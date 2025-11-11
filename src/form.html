@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>BackVault Setup</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: #111;
+            color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #1c1c1c;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
+            width: 400px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 24px;
+            font-weight: 500;
+            color: #f15a24;
+        }
+
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #222;
+            color: #eee;
+            font-size: 14px;
+            margin-bottom: 18px;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #f15a24;
+            background: #1b1b1b;
+        }
+
+        button {
+            background: #f15a24;
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #ff763f;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>BackVault Setup</h2>
+        <form action="/init" method="post">
+            <label>Bitwarden Client ID</label>
+            <input type="text" name="client_id" required />
+            <label>Bitwarden Client Secret</label>
+            <input type="password" name="client_secret" required />
+            <label>Bitwarden Master Password</label>
+            <input type="password" name="master_password" required />
+            <label>Backup File Password</label>
+            <input type="password" name="file_password" required />
+            <button type="submit">Initialize</button>
+        </form>
+    </div>
+</body>
+
+</html>
