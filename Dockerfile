@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     unzip \
     sqlcipher \
-    age \
     libssl-dev \
     libsqlite3-dev \
     libsqlcipher-dev \
