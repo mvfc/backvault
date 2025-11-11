@@ -1,43 +1,77 @@
 # 🗄️ BackVault
 
-**BackVault** is a lightweight Dockerized service that periodically backs up your **Bitwarden** or **Vaultwarden** vaults into password-protected encrypted files.  
+**BackVault** is a lightweight Dockerized service that periodically backs up your **Bitwarden** or **Vaultwarden** vaults into password-protected encrypted files.
 It’s designed for hands-free, secure, and automated backups using the official Bitwarden CLI.
 
 ---
 
 ## 🚀 Features
 
-- 🔒 Securely exports your vault using your Bitwarden credentials  
-- 🕐 Supports both **interval-based** and **cron-based** backup scheduling  
-- 💾 Password-protected backup files using AES encryption  
-- 🧹 **Automated Cleanup**: Automatically deletes old backups based on a configurable retention period.
-- ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
-- 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden  
-- 🐳 Runs fully containerized — no setup or local dependencies required
+* 🔒 Securely exports your vault using your Bitwarden credentials
+* 🕐 Supports both **interval-based** and **cron-based** backup scheduling
+* 💾 Password-protected backup files using AES encryption
+* 🧹 **Automated Cleanup**: Automatically deletes old backups based on a configurable retention period.
+* ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
+* 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden
+* 🐳 Runs fully containerized — no setup or local dependencies required
 
 ---
 
 ## 📦 Quick Start (Docker)
 
 You can run BackVault directly using the **published Docker image**, no build required.
-You can use either the github registry image (ghcr.io/mvfc/backvault) or the Docker Hub image (mvflc/backvault).
+You can use either the GitHub Registry image (`ghcr.io/mvfc/backvault`) or the Docker Hub image (`mvflc/backvault`).
 
 ```bash
 docker run -d \
   --name backvault \
-  -e BW_CLIENT_ID="your_client_id" \
-  -e BW_CLIENT_SECRET="your_client_secret" \
-  -e BW_PASSWORD="your_master_password" \
   -e BW_SERVER="https://vault.yourdomain.com" \
-  -e BW_FILE_PASSWORD="backup_encryption_password" \
   -e BACKUP_ENCRYPTION_MODE="raw" \
   -e BACKUP_INTERVAL_HOURS=12 \
   -v /path/to/backup:/app/backups \
+  -v /path/to/db:/app/db \
+  -p 8080:8080 \
   ghcr.io/mvfc/backvault:latest
 ```
 
 > 🔑 **Important**: The container uses the official Bitwarden CLI internally.
 > Your credentials are only used to generate the export — they are **never stored** persistently and **never sent** anywhere else.
+
+---
+
+## 🧰 Initial Setup Flow
+
+BackVault now includes a **secure one-time web-based setup UI** that replaces the need to pass sensitive credentials via environment variables.
+When you start the container for the first time, it will:
+
+1. Detect that no secure configuration exists yet.
+2. Launch a **local-only setup UI** (FastAPI) on port `8080`.
+3. Prompt you to enter your Bitwarden credentials and backup password.
+4. Encrypt and store them in an **SQLCipher-encrypted SQLite database**, using a generated pragma key.
+5. Securely store the encryption key and database inside the container volume, accessible only to the container’s internal user.
+
+Once setup is complete:
+
+* The UI **automatically shuts down**.
+* The container transitions into normal mode and begins scheduled backups.
+* All sensitive data is encrypted at rest — no plaintext secrets remain.
+
+You can safely restart or update the container later without re-entering credentials, as long as the `/app/db` volume persists.
+
+> 🧩 **Tip:** You can mount the `/app/db` directory to your host if you want to persist encrypted credentials across container updates.
+
+---
+
+## 🛡️ Security Architecture
+
+The new version of BackVault is built around **principle of least privilege** and **container-isolated secrets**:
+
+* 🧱 **Non-root container:** The service runs under an unprivileged user (`UID 1000`).
+* 🔐 **Encrypted credential store:** All secrets (Bitwarden credentials, file encryption key and master password) are stored in an SQLCipher database using AES-256 encryption.
+* 🔄 **No plaintext environment secrets:** You no longer need to define sensitive values like `BW_PASSWORD` or `BW_CLIENT_SECRET` as environment variables.
+* 🕶️ **Ephemeral setup interface:** The setup UI is automatically destroyed after configuration to minimize attack surface and idle resource usage.
+
+Together, these changes make BackVault one of the most secure self-hosted Bitwarden backup utilities available — suitable even for multi-user and shared-host environments.
 
 ---
 
@@ -52,16 +86,15 @@ services:
     container_name: backvault
     restart: unless-stopped
     environment:
-      BW_CLIENT_ID: "your_client_id"
-      BW_CLIENT_SECRET: "your_client_secret"
-      BW_PASSWORD: "your_master_password"
       BW_SERVER: "https://vault.yourdomain.com"
-      BW_FILE_PASSWORD: "backup_encryption_password"
       BACKUP_ENCRYPTION_MODE: "raw" # Use 'bitwarden' for the default format
       BACKUP_INTERVAL_HOURS: 12
       NODE_TLS_REJECT_UNAUTHORIZED: 0
     volumes:
       - ./backups:/app/backups
+      - ./db:/app/db
+    ports:
+      - "8080:8080"
 ```
 
 Then run:
@@ -74,7 +107,7 @@ BackVault will automatically:
 
 1. Log in to your Bitwarden/Vaultwarden instance
 2. Export your vault
-3. Encrypt it using `BW_FILE_PASSWORD`
+3. Encrypt it using the chosen file password
 4. Store the backup in `/app/backups` (mounted to your host directory)
 5. Logout after every backup
 
@@ -84,11 +117,7 @@ BackVault will automatically:
 
 | Variable                       | Description                                    | Required | Example                     |
 | ------------------------------ | ---------------------------------------------- | -------- | --------------------------- |
-| `BW_CLIENT_ID`                 | Bitwarden client ID for API authentication     | ✅        | `xxxx-xxxx-xxxx-xxxx`       |
-| `BW_CLIENT_SECRET`             | Bitwarden client secret                        | ✅        | `your_client_secret`        |
-| `BW_PASSWORD`                  | Master password for your vault                 | ✅        | `supersecret`               |
 | `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | `https://vault.example.com` |
-| `BW_FILE_PASSWORD`             | Password to encrypt exported backup file       | ✅        | `strong_backup_password`    |
 | `BACKUP_INTERVAL_HOURS`        | Alternative to cron expression (integer hours) | ❌        | `12`                        |
 | `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. | ❌ | `raw` |
 | `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
@@ -188,7 +217,7 @@ if __name__ == "__main__":
 
 ## 🧠 Tips
 
-* Store `BW_FILE_PASSWORD` securely — it’s required for restoring backups.
+* Store your backup file password securely — it’s required for restoring backups.
 * You can run this container alongside Vaultwarden on the same host or a separate machine.
 * Combine with tools like `restic` or `rclone` to push backups to cloud storage.
 
