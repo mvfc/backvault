@@ -20,6 +20,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Debug GitHub Ref and Tag Name
+        run: |
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.event.release.tag_name: ${{ github.event.release.tag_name }}"
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
