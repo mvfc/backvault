@@ -1,6 +1,4 @@
-[![CI](https://github.com/mvfc/backvault/actions/workflows/ci.yml/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/ci.yml) [![Release CI](https://github.com/mvfc/backvault/actions/workflows/release.yml/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/release.yml) [![CodeQL](https://github.com/mvfc/backvault/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/github-code-scanning/codeql) ![GitHub Release](https://img.shields.io/github/v/release/mvfc/backvault)
-
-
+[![CI](https://github.com/mvfc/backvault/actions/workflows/ci.yml/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/ci.yml) [![Release CI](https://github.com/mvfc/backvault/actions/workflows/release.yml/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/release.yml) [![CodeQL](https://github.com/mvfc/backvault/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mvfc/backvault/actions/workflows/github-code-scanning/codeql) ![GitHub Release](https://img.shields.io/github/v/release/mvfc/backvault) ![Docker Pulls](https://img.shields.io/docker/pulls/mvflc/backvault) ![Python Version from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fmvfc%2Fbackvault%2Fmain%2Fpyproject.toml) ![License](https://img.shields.io/github/license/mvfc/backvault)
 
 ---
 
