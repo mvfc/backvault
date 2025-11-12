@@ -1,0 +1,25 @@
+name: Release CI
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY_GHCR: ghcr.io
+  REGISTRY_DOCKERHUB: docker.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Debug GitHub Ref and Tag Name
+        run: |
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.event.release.tag_name: ${{ github.event.release.tag_name }}"
