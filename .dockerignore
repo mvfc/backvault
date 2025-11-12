@@ -8,3 +8,9 @@ LICENSE
 uv.lock
 pyproject.toml
 backup/
+db/
+__pycache__/
+sqlcipher/
+decrypt.py
+.github/
+tests/

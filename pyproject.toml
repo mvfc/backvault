@@ -8,11 +8,18 @@ dependencies = [
     "fastapi>=0.121.1",
     "pip>=25.3",
     "pysqlite3>=0.5.4",
+    "python-multipart>=0.0.20",
     "sqlcipher3>=0.5.4",
     "sqlcipher3-binary>=0.5.4",
+    "uvicorn>=0.38.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.0",
     "ruff>=0.14.2",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = "."

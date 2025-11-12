@@ -1,9 +1,12 @@
-import os
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-from db import db_connect, put_key
+from src.db import db_connect, put_key
 import logging
 from sys import stdout
+from threading import Thread
+import time
+import os
+import signal
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,15 +23,18 @@ DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
 PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
 
 # --- UI HTML ---
-HTML_FORM = open("./form.html").read()
+HTML_FORM = open(os.path.dirname(os.path.abspath(__file__)) + "/form.html").read()
+
 
 @app.get("/health")
-def health_check():
+def health_check() -> dict:
     return {"status": "ok"}
 
+
 @app.get("/", response_class=HTMLResponse)
-def index():
+def index() -> str:
     return HTML_FORM
+
 
 @app.post("/init")
 async def init(
@@ -40,7 +46,7 @@ async def init(
     conn, cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not conn or not cursor:
         return HTMLResponse("Database connection failed", status_code=500)
-    
+
     # Store encrypted passwords and keys
     put_key(conn, "master_password", master_password.encode())
     put_key(conn, "client_id", client_id.encode())
@@ -51,12 +57,11 @@ async def init(
 
     return RedirectResponse("/done", status_code=302)
 
-@app.get("/done", response_class=HTMLResponse)
-def done():
-    from threading import Thread
-    import time, os, signal
 
+@app.get("/done", response_class=HTMLResponse)
+def done() -> str:
     logging.info("Setup complete, shutting down UI...")
+
     def _shutdown():
         time.sleep(0.5)
         os.kill(os.getpid(), signal.SIGTERM)

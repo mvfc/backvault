@@ -4,3 +4,4 @@ sqlcipher3
 fastapi
 uvicorn
 python-multipart
+pytest

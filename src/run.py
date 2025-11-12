@@ -1,13 +1,9 @@
 import os
 import logging
-from bw_client import BitwardenClient
+from src.bw_client import BitwardenClient
 from datetime import datetime
 from sys import stdout
-import sqlcipher3
-import hashlib
-import base64
-import uuid
-from db import db_connect, get_key
+from src.db import db_connect, get_key
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,11 +12,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def require_env(name: str) -> str:
     val = os.getenv(name)
     if not val:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
+
 
 def main():
     # Database setup
@@ -29,12 +27,12 @@ def main():
     db_conn, db_cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not db_conn or not db_cursor:
         return
-    
+
     # Vault access information
-    client_id = get_key(db_conn, 'client_id')
-    client_secret = get_key(db_conn, 'client_secret')
-    master_pw = get_key(db_conn, 'master_password')
-    file_pw = get_key(db_conn, 'file_password')
+    client_id = get_key(db_conn, "client_id")
+    client_secret = get_key(db_conn, "client_secret")
+    master_pw = get_key(db_conn, "master_password")
+    file_pw = get_key(db_conn, "file_password")
 
     server = require_env("BW_SERVER")
 

@@ -289,6 +289,8 @@ class BitwardenClient:
         raw_json = self._run(
             cmd=["export", "--format", "json", "--raw"], capture_json=True
         )
-        encrypted_data = self.encrypt_data(json.dumps(raw_json).encode("utf-8"), file_pw)
+        encrypted_data = self.encrypt_data(
+            json.dumps(raw_json).encode("utf-8"), file_pw
+        )
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
