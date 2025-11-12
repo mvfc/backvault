@@ -28,7 +28,7 @@ jobs:
             ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
             ${{ env.REGISTRY_DOCKERHUB }}/mvflc/backvault
           tags: |
-            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}}
             type=raw,value=latest
 
       - name: Log in to GHCR

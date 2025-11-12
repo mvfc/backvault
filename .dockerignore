@@ -2,7 +2,6 @@
 .env
 .gitignore
 .venv/
-.ruff_cache/
 logs/
 LICENSE
 uv.lock
@@ -14,3 +13,4 @@ sqlcipher/
 decrypt.py
 .github/
 tests/
+*cache*/
