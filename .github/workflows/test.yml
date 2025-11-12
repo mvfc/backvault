@@ -2,7 +2,7 @@ name: Release CI
 
 on:
   pull_request:
-    branches: [ "release_ci_fix" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
