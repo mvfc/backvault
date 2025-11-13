@@ -35,7 +35,7 @@ docker run -d \
   -v /path/to/backup:/app/backups \
   -v /path/to/db:/app/db \
   -p 8080:8080 \
-  ghcr.io/mvfc/backvault:latest
+  mvflc/backvault:latest
 ```
 
 > 🔑 **Important**: The container uses the official Bitwarden CLI internally.
@@ -86,7 +86,7 @@ Here’s how to set it up with Docker Compose for easy management:
 ```yaml
 services:
   backvault:
-    image: ghcr.io/mvfc/backvault:latest
+    image: mvflc/backvault:latest
     container_name: backvault
     restart: unless-stopped
     environment:
@@ -232,7 +232,7 @@ if __name__ == "__main__":
 To update to the latest version:
 
 ```bash
-docker pull ghcr.io/mvfc/backvault:latest
+docker pull mvflc/backvault:latest
 ```
 
 If using docker compose:
