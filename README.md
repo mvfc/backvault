@@ -179,7 +179,7 @@ This mode uses Bitwarden's native encrypted JSON format. It's secure but proprie
 
 ### Mode 2: `raw` (Recommended for Portability)
 
-This mode exports the vault as raw JSON and then encrypts it in-memory using a standard, portable format: **AES-256-GCM** with a key derived using **PBKDF2-SHA256**.
+This mode exports the vault as raw JSON and then encrypts it in-memory using a standard, portable format: **AES-256-GCM** with a key derived using **Argon2id**.
 
 The main advantage is that you **do not need the Bitwarden CLI** to decrypt your data, making it ideal for disaster recovery. You can use standard tools like Python or OpenSSL.
 
@@ -187,15 +187,18 @@ The main advantage is that you **do not need the Bitwarden CLI** to decrypt your
 The resulting `.enc` file contains: `[4-byte version][16-byte salt][12-byte nonce][encrypted data + 16-byte auth tag]`
 
 **Version History:**
-- **Version 1**: PBKDF2 iterations: 600,000 (OWASP 2023 recommendation)
+- **Version 2** (Current): Argon2id key derivation (time_cost=3, memory_cost=64MB, parallelism=4) - Resistant to GPU/ASIC attacks
+- **Version 1** (Legacy): PBKDF2-HMAC-SHA256 iterations: 600,000 (OWASP 2023 recommendation)
 
 **How to Decrypt (Python Script):**
 
-Here is a simple Python script to decrypt the file. You only need the `cryptography` library.
+Here is a simple Python script to decrypt the file. You only need the `cryptography` and `argon2-cffi` libraries.
 
 1.  Save the code below as `decrypt.py`.
-2.  Install the dependency: `pip install cryptography`.
-3.  Run the script: `python decrypt.py /path/to/backup.enc "YOUR_FILE_PASSWORD"`
+2.  Install the dependencies: `pip install cryptography argon2-cffi`.
+3.  Run the script: `python decrypt.py /path/to/backup.enc` (you will be prompted for the password)
+
+The script supports both Version 1 (PBKDF2) and Version 2 (Argon2id) encrypted files automatically.
 
 ```python
 # decrypt.py
@@ -206,52 +209,65 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.exceptions import InvalidTag
+from argon2.low_level import Type, hash_secret_raw
 
 SALT_SIZE = 16
 KEY_SIZE = 32
 
-# Version-specific parameters
-VERSION_PARAMS = {
-    1: {"iterations": 600000},  # Version 1: OWASP 2023 recommendation
-}
+# Version 1: PBKDF2-HMAC-SHA256
+PBKDF2_ITERATIONS = 600000  # OWASP 2023 recommendation
+
+# Version 2: Argon2id
+ARGON2_TIME_COST = 3
+ARGON2_MEMORY_COST = 65536  # 64 MB in KiB
+ARGON2_PARALLELISM = 4
 
 def decrypt_data(encrypted_data: bytes, password: str) -> bytes:
-    # Read version header (4 bytes, big-endian)
-    version = int.from_bytes(encrypted_data[:4], byteorder='big')
-
-    if version not in VERSION_PARAMS:
-        raise ValueError(f"Unsupported file version: {version}")
-
-    # Get version-specific parameters
-    iterations = VERSION_PARAMS[version]["iterations"]
-    print(f"Decrypting version {version} file (PBKDF2 iterations: {iterations:,})", file=sys.stderr)
-
-    # Extract components after version header
+    # Read version header (4 bytes)
+    version_num = int.from_bytes(encrypted_data[:4], byteorder="big")
     offset = 4
+
     salt = encrypted_data[offset:offset+SALT_SIZE]
     nonce = encrypted_data[offset+SALT_SIZE:offset+SALT_SIZE+12]
     ciphertext_with_tag = encrypted_data[offset+SALT_SIZE+12:]
 
-    # Derive key
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=KEY_SIZE,
-        salt=salt,
-        iterations=iterations
-    )
-    key = kdf.derive(password.encode("utf-8"))
+    # Derive key based on version
+    if version_num == 1:
+        # Legacy PBKDF2 format
+        print(f"Decrypting version {version_num} file (PBKDF2-HMAC-SHA256, {PBKDF2_ITERATIONS:,} iterations)", file=sys.stderr)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=KEY_SIZE,
+            salt=salt,
+            iterations=PBKDF2_ITERATIONS
+        )
+        key = kdf.derive(password.encode("utf-8"))
+    elif version_num == 2:
+        # Current Argon2id format
+        print(f"Decrypting version {version_num} file (Argon2id, {ARGON2_MEMORY_COST // 1024} MB)", file=sys.stderr)
+        key = hash_secret_raw(
+            secret=password.encode("utf-8"),
+            salt=salt,
+            time_cost=ARGON2_TIME_COST,
+            memory_cost=ARGON2_MEMORY_COST,
+            parallelism=ARGON2_PARALLELISM,
+            hash_len=KEY_SIZE,
+            type=Type.ID,
+        )
+    else:
+        raise ValueError(f"Unsupported encryption version: {version_num}")
 
-    # Decrypt
+    # Decrypt using AES-GCM
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ciphertext_with_tag, None)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <encrypted_file> [password]")
+        print(f"Usage: python {sys.argv[0]} <encrypted_file>")
         sys.exit(1)
 
     file_path = sys.argv[1]
-    password = sys.argv[2] if len(sys.argv) > 2 else getpass("Enter backup password: ")
+    password = getpass("Enter backup password: ")
 
     try:
         with open(file_path, "rb") as f:
@@ -356,6 +372,49 @@ For comprehensive build documentation including troubleshooting, see **[BUILD.md
 
 This project is licensed under the **AGPL-3.0 License**.
 See LICENSE for details.
+
+---
+
+## 🧪 Development & Testing
+
+### Running Tests
+
+BackVault uses pytest for testing:
+
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage
+pytest --cov=src --cov-report=html
+```
+
+### Test Suite
+
+Our comprehensive test suite includes:
+- **Encryption/Decryption Tests**: Argon2id implementation and PBKDF2 backward compatibility
+- **Security Property Tests**: Random salt/nonce generation, password validation
+- **Edge Case Tests**: Empty data, large files (1MB+), unicode passwords
+
+All tests run automatically in CI/CD on every push and pull request.
+
+### Code Quality
+
+```bash
+# Run linting
+ruff check src/
+
+# Auto-format code
+ruff format src/
+```
+
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for detailed development guidelines.
 
 ---
 

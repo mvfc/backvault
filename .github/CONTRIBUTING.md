@@ -23,13 +23,28 @@ Thank you for your interest in contributing to BackVault! This document provides
    pip install -r requirements-dev.txt
    ```
 
-3. **Run linting:**
+3. **Run tests:**
+   ```bash
+   # Run all tests
+   pytest
+
+   # Run with verbose output
+   pytest -v
+
+   # Run specific test file
+   pytest tests/test_encryption.py
+
+   # Run with coverage report
+   pytest --cov=src --cov-report=html
+   ```
+
+4. **Run linting:**
    ```bash
    ruff check src/
    ruff format src/
    ```
 
-4. **Build Docker image locally:**
+5. **Build Docker image locally:**
    ```bash
    docker build -t backvault:dev .
    ```
@@ -216,10 +231,34 @@ Instead:
 
 ## Testing
 
+### Running Tests
+
+Before submitting a PR, run the test suite:
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=term-missing
+
+# Run specific test class
+pytest tests/test_encryption.py::TestArgon2Encryption -v
+```
+
+### Test Coverage
+
+We have comprehensive test coverage for:
+- **Encryption/Decryption**: Argon2id implementation, PBKDF2 backward compatibility
+- **Security Properties**: Salt randomness, nonce uniqueness, password validation
+- **Edge Cases**: Empty data, large files, unicode passwords, special characters
+
 ### Manual Testing Checklist
 
 Before submitting a PR, test:
 
+- [ ] All pytest tests pass (`pytest`)
+- [ ] Linting passes (`ruff check src/`)
 - [ ] Docker image builds successfully
 - [ ] Container starts without errors
 - [ ] Backup creation works
@@ -231,10 +270,25 @@ Before submitting a PR, test:
 ### Automated Tests
 
 We use:
-- **Ruff** for code linting
+- **Pytest** for unit and integration tests
+- **Ruff** for code linting and formatting
 - **Bandit** for security scanning
 - **Trivy** for container vulnerability scanning
 - Docker build tests in CI
+
+### Writing New Tests
+
+When adding new features:
+
+1. **Add unit tests** in `tests/test_*.py`
+2. **Use pytest fixtures** from `tests/conftest.py`
+3. **Follow naming conventions**: `test_<feature>_<scenario>()`
+4. **Add docstrings** explaining what the test verifies
+5. **Use markers** for test categorization:
+   ```python
+   @pytest.mark.slow
+   @pytest.mark.security
+   ```
 
 ## Documentation
 

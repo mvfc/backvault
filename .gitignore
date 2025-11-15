@@ -1,10 +1,14 @@
 .env
 __pycache__/
 .ruff_cache/
+.pytest_cache/
 .venv/
 backup/
 backups/
 logs/
-decrypt.py
+/decrypt.py
 .vscode/
 .python-version
+.serena
+htmlcov/
+.coverage

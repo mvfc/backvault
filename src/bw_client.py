@@ -9,14 +9,21 @@ from sys import stdout
 from pathlib import Path
 from functools import wraps
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
+from argon2.low_level import Type, hash_secret_raw
 
 # Constants for encryption
 SALT_SIZE = 16
 KEY_SIZE = 32  # For AES-256
+
+# PBKDF2 parameters (legacy - version 1)
 PBKDF2_ITERATIONS = 600000  # OWASP 2023 recommendation
-ENCRYPTION_VERSION = 1  # File format version for future compatibility
+
+# Argon2id parameters (current - version 2)
+ARGON2_TIME_COST = 3  # Number of iterations
+ARGON2_MEMORY_COST = 65536  # 64 MB in KiB
+ARGON2_PARALLELISM = 4  # Number of parallel threads
+
+ENCRYPTION_VERSION = 2  # File format version for future compatibility
 
 logging.basicConfig(
     level=logging.INFO,
@@ -308,7 +315,14 @@ class BitwardenClient:
         Encrypts data using AES-256-GCM with a key derived from the password.
         Format: version (4 bytes) + salt (16 bytes) + nonce (12 bytes) + ciphertext + tag (16 bytes)
 
-        Version 1 format:
+        Version 2 format (current):
+        - Key derivation: Argon2id
+        - Time cost: 3 iterations
+        - Memory cost: 64 MB
+        - Parallelism: 4 threads
+        - Encryption: AES-256-GCM
+
+        Version 1 format (legacy):
         - PBKDF2 iterations: 600,000
         - Key derivation: PBKDF2-HMAC-SHA256
         - Encryption: AES-256-GCM
@@ -320,21 +334,23 @@ class BitwardenClient:
 
         salt = os.urandom(SALT_SIZE)
 
-        # Derive a key from the password and salt
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=KEY_SIZE,
+        # Derive a key from the password and salt using Argon2id
+        key = hash_secret_raw(
+            secret=password.encode("utf-8"),
             salt=salt,
-            iterations=PBKDF2_ITERATIONS,
+            time_cost=ARGON2_TIME_COST,
+            memory_cost=ARGON2_MEMORY_COST,
+            parallelism=ARGON2_PARALLELISM,
+            hash_len=KEY_SIZE,
+            type=Type.ID,  # Argon2id
         )
-        key = kdf.derive(password.encode("utf-8"))
 
         # Encrypt using AES-GCM
         aesgcm = AESGCM(key)
         nonce = os.urandom(12)  # GCM recommended nonce size
         ciphertext = aesgcm.encrypt(nonce, data, None)
 
-        logger.info("Encryption successful.")
+        logger.info(f"Encryption successful (Version {ENCRYPTION_VERSION}, Argon2id).")
         return version + salt + nonce + ciphertext
 
     def _validate_backup_path(

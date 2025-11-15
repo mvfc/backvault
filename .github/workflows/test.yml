@@ -33,6 +33,27 @@ jobs:
       - name: Run Ruff formatter check
         run: ruff format --check src/
 
+  pytest:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: |
+          pytest tests/ -v --tb=short
+
   docker-build-test:
     name: Test Docker Build
     runs-on: ubuntu-latest

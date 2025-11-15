@@ -1,2 +1,4 @@
 -r requirements.txt
 ruff>=0.14.2
+pytest>=7.4.0
+pytest-cov>=4.1.0
