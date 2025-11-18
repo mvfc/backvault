@@ -29,8 +29,7 @@ RUN apk upgrade -a
 # Install Bitwarden CLI
 RUN set -eux; \
     echo "Installing Bitwarden CLI version: ${BW_VERSION} with Node.js $(node --version)"; \
-    npm install -g @bitwarden/cli@${BW_VERSION}; \
-    bw --version
+    npm install -g @bitwarden/cli@${BW_VERSION}
 
 # Install supercronic
 RUN set -eux; \
