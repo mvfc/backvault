@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # If no arguments are passed, start the service. Otherwise, execute the arguments.
-if [ -z "$1" ]; then
+if [ $# -eq 0 ]; then
     echo "Initializing Backvault container..."
     BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
     CRON_EXPRESSION=${CRON_EXPRESSION:-"0 */$BACKUP_INTERVAL_HOURS * * *"}
