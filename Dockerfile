@@ -22,7 +22,7 @@ RUN apk update && apk add --no-cache \
     nodejs \
     npm \
     coreutils \
-    lib6c-compat \
+    libc6-compat \
     && rm -rf /var/lib/apk/*
 
 RUN apk upgrade -a
