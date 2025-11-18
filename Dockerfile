@@ -39,7 +39,7 @@ RUN set -eux; \
     case "${TARGETARCH}" in \
         "amd64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_AMD64}" ;; \
         "arm64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARM64}" ;; \
-        "armv7") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
+        "arm") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
         *) echo "Unsupported architecture for supercronic: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     \
