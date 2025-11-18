@@ -47,6 +47,9 @@ jobs:
           - linux/386
     steps:
       - uses: actions/checkout@v4
+      - name: Sanitize ref name for docker tag
+        id: sanitize_ref
+        run: echo "ref_name=$(echo ${{ github.ref_name }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -54,8 +57,8 @@ jobs:
       - name: Build Docker image
         run: |
           docker buildx build --platform=${{ matrix.platform }} --load \
-            -t ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-test \
+            -t ${{ env.IMAGE_NAME }}:${{ steps.sanitize_ref.outputs.ref_name }}-test \
             .
       - name: Run test
         run: |
-          docker run --rm --platform ${{ matrix.platform }} ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-test bw --version
+          docker run --rm --platform ${{ matrix.platform }} ${{ env.IMAGE_NAME }}:${{ steps.sanitize_ref.outputs.ref_name }}-test bw --version
