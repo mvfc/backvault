@@ -21,7 +21,8 @@ RUN apk update && apk add --no-cache \
     nodejs \
     npm \
     coreutils \
-    py3-cryptography \
+    libffi-dev \
+    cargo \
     && rm -rf /var/lib/apk/*
 
 RUN apk upgrade -a
@@ -72,7 +73,7 @@ RUN pip install --upgrade pip && \
 
 RUN npm install koa@3.0.1 && npm install tmp@0.2.4
 
-RUN apk del curl unzip binutils npm coreutils build-base --no-cache && \
+RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev --no-cache && \
     rm -rf /var/lib/apk/*
 
 ENV PYTHONPATH=/app
