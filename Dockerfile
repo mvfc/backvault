@@ -5,7 +5,6 @@ ARG SUPERCRONIC_VERSION="v0.2.39"
 ARG SUPERCRONIC_SHA1SUM_LINUX_AMD64=c98bbf82c5f648aaac8708c182cc83046fe48423
 ARG SUPERCRONIC_SHA1SUM_LINUX_ARM64=5ef4ccc3d43f12d0f6c3763758bc37cc4e5af76e
 ARG SUPERCRONIC_SHA1SUM_LINUX_ARMV7=8c3dbef8175e3f579baefe4e55978f2a27cb76b5
-ARG SUPERCRONIC_SHA1SUM_LINUX_386=2f94144bc5b10ffca1f4020b3fab7cffca869e8e
 ARG TARGETARCH
 
 # Install minimal required packages
@@ -41,7 +40,6 @@ RUN set -eux; \
         "amd64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_AMD64}" ;; \
         "arm64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARM64}" ;; \
         "armv7") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
-        "386") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_386}" ;; \
         *) echo "Unsupported architecture for supercronic: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     \
@@ -74,7 +72,7 @@ RUN pip install --upgrade pip && \
 
 RUN npm install koa@3.0.1 && npm install tmp@0.2.4
 
-RUN apk del curl unzip binutils npm coreutils --no-cache && \
+RUN apk del curl unzip binutils npm coreutils build-base --no-cache && \
     rm -rf /var/lib/apk/*
 
 ENV PYTHONPATH=/app

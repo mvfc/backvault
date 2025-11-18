@@ -44,7 +44,6 @@ jobs:
           - linux/amd64
           - linux/arm64
           - linux/arm/v7
-          - linux/386
     steps:
       - uses: actions/checkout@v4
       - name: Sanitize ref name for docker tag
