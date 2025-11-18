@@ -22,7 +22,7 @@ RUN apk update && apk add --no-cache \
     nodejs \
     npm \
     coreutils \
-    gcompat \
+    lib6c-compat \
     && rm -rf /var/lib/apk/*
 
 RUN apk upgrade -a
@@ -71,6 +71,8 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 # Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-input --no-cache-dir -r requirements.txt
+
+RUN npm install koa@3.0.1 && npm install tmp@0.2.4
 
 RUN apk del curl unzip binutils npm coreutils --no-cache && \
     rm -rf /var/lib/apk/*
