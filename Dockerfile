@@ -21,7 +21,7 @@ RUN apk update && apk add --no-cache \
     nodejs \
     npm \
     coreutils \
-    libffi \
+    py3-cryptography \
     && rm -rf /var/lib/apk/*
 
 RUN apk upgrade -a
