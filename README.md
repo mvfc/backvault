@@ -4,7 +4,7 @@
 
 <img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/3ca55b47-b1c7-4002-a167-f5752605fa1a" />
 
-**BackVault** is a lightweight Dockerized service that periodically backs up your **Bitwarden** or **Vaultwarden** vaults into password-protected encrypted files.
+**BackVault** is a lightweight Dockerized multi-architecture service that periodically backs up your **Bitwarden** or **Vaultwarden** vaults into password-protected encrypted files.
 It’s designed for hands-free, secure, and automated backups using the official Bitwarden CLI.
 
 ---
@@ -25,6 +25,8 @@ It’s designed for hands-free, secure, and automated backups using the official
 
 You can run BackVault directly using the **published Docker image**, no build required.
 You can use either the GitHub Registry image (`ghcr.io/mvfc/backvault`) or the Docker Hub image (`mvflc/backvault`).
+
+All tags up from v1.0.4 are multi-architecture images and can be deployed to Linux/AMD64, Linux/ARM64 and Linux/ARM/v7 systems by just pointing to latest or the corresponding version tag.
 
 Before running the Docker or Docker Compose commands, create the db and backup folders you will mount to on your host *WITHOUT* using sudo so they are owned by user 1000:1000 (which is unpriviledged). If you skip this step, you *MUST* do a `sudo chown -R 1000:1000 ./db` and a `sudo chown -R 1000:1000 ./backups`.
 
