@@ -52,9 +52,10 @@ RUN set -eux; \
     mv "$SUPERCRONIC_BINARY" /usr/local/bin/supercronic;
 
 # Prepare working directories
-RUN mkdir -p /app/logs /app/backups /app/db /app/src && \
+RUN mkdir -p /app/logs /app/backups /app/db /app/src /.config && \
     chmod -R 700 /app && \
-    chown -R 1000:1000 /app
+    chown -R 1000:1000 /app \
+    chown -R 1000:1000 /.config
 
 # Copy project files
 WORKDIR /app
