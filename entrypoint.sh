@@ -52,5 +52,14 @@ EOF
     echo "Starting supercronic scheduler..."
     exec /usr/local/bin/supercronic /app/crontab
 else
-    exec "$@"
+    case "$1" in
+        bw)
+            exec "$@"
+            ;;
+        *)
+            echo "Error: Unknown or disallowed command: $1"
+            echo "Allowed commands: bw, uvicorn, supercronic, bash, sh"
+            exit 1
+            ;;
+    esac
 fi
