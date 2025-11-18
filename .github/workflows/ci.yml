@@ -49,11 +49,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Build Docker image
         run: |
-          docker build \
-            -t {{ env.IMAGE_NAME }}:${{ github.ref_name }}-test \
+          docker buildx build --platform=${{ matrix.platform }} --load \
+            -t ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-test \
             .
       - name: Run test
         run: |
-          docker run --platform ${{ matrix.platform }} ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-test bw --version
+          docker run --rm --platform ${{ matrix.platform }} ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-test bw --version
