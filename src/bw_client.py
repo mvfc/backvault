@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 password_regex = re.compile(r"('--password',\s*)('[^']*')(\s*]')", re.IGNORECASE)
-unlock_regex = re.compile(r"('unlock',\s*)('[^']*\s*--raw)", re.IGNORECASE)
+unlock_regex = re.compile(r"('unlock',\s*)('[^']*\s*-)", re.IGNORECASE)
 
 
 class BitwardenError(Exception):
@@ -138,7 +138,7 @@ class BitwardenClient:
             )
         except Exception as e:
             masked_e = password_regex.sub("('--password', '****')]", e.__str__())
-            masked_e = unlock_regex.sub("('unlock', '**** --raw')", masked_e)
+            masked_e = unlock_regex.sub("('unlock', '****', '-)", masked_e)
             logger.error(f"Failed to run command: {masked_e}")
             try:
                 sprun(

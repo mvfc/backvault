@@ -1,41 +1,56 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13-alpine
 
-# Pin version and digest for Bitwarden CLI
 ARG BW_VERSION="2025.10.0"
-ARG BW_SHA256="0544c64d3e9932bb5f2a70e819695ea78186a44ac87a0b1d753e9c55217041d9"
-ARG SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.39/supercronic-linux-amd64
-ARG SUPERCRONIC_SHA1SUM=c98bbf82c5f648aaac8708c182cc83046fe48423
-ARG SUPERCRONIC=supercronic-linux-amd64
+ARG SUPERCRONIC_VERSION="v0.2.39"
+ARG SUPERCRONIC_SHA1SUM_LINUX_AMD64=c98bbf82c5f648aaac8708c182cc83046fe48423
+ARG SUPERCRONIC_SHA1SUM_LINUX_ARM64=5ef4ccc3d43f12d0f6c3763758bc37cc4e5af76e
+ARG SUPERCRONIC_SHA1SUM_LINUX_ARMV7=8c3dbef8175e3f579baefe4e55978f2a27cb76b5
+ARG SUPERCRONIC_SHA1SUM_LINUX_386=2f94144bc5b10ffca1f4020b3fab7cffca869e8e
+ARG TARGETARCH
 
 # Install minimal required packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk update && apk add --no-cache \
     curl \
     bash \
     unzip \
     sqlcipher \
-    libssl-dev \
-    libsqlite3-dev \
-    libsqlcipher-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+    libressl-dev \
+    sqlite-dev \
+    sqlcipher-dev \
+    build-base \
+    python3-dev \
+    nodejs \
+    npm \
+    coreutils \
+    && rm -rf /var/lib/apk/*
 
-# Create non-root user
-RUN groupadd -g 1000 backvault \
- && useradd -m -u 1000 -g 1000 -s /bin/bash backvault
+RUN apk upgrade -a
 
-# Install Bitwarden CLI (verified)
+# Install Bitwarden CLI
 RUN set -eux; \
-    curl -Lo bw.zip "https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${BW_VERSION}.zip"; \
-    echo "${BW_SHA256}  bw.zip" | sha256sum -c -; \
-    unzip bw.zip -d /usr/local/bin; \
-    chmod +x /usr/local/bin/bw; \
-    rm bw.zip
+    echo "Installing Bitwarden CLI version: ${BW_VERSION} with Node.js $(node --version)"; \
+    npm install -g @bitwarden/cli@${BW_VERSION}; \
+    bw --version
 
-RUN curl -fsSLO "$SUPERCRONIC_URL" \
- && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
- && chmod +x "$SUPERCRONIC" \
- && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
- && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
+# Install supercronic
+RUN set -eux; \
+    echo "Installing supercronic for ${TARGETARCH}"; \
+    \
+    case "${TARGETARCH}" in \
+        "amd64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_AMD64}" ;; \
+        "arm64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARM64}" ;; \
+        "armv7") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
+        "386") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_386}" ;; \
+        *) echo "Unsupported architecture for supercronic: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    \
+    SUPERCRONIC_URL="https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}"; \
+    SUPERCRONIC_BINARY="supercronic-linux-${TARGETARCH}"; \
+    \
+    curl -fsSLO "$SUPERCRONIC_URL"; \
+    echo "${SHA1SUM_VALUE}  ${SUPERCRONIC_BINARY}" | sha1sum -c -; \
+    chmod +x "$SUPERCRONIC_BINARY"; \
+    mv "$SUPERCRONIC_BINARY" /usr/local/bin/supercronic;
 
 # Prepare working directories
 RUN mkdir -p /app/logs /app/backups /app/db /app/src && \
@@ -56,7 +71,8 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 RUN pip install --upgrade pip && \
     pip install --no-input --no-cache-dir -r requirements.txt
 
-RUN apt-get remove curl unzip binutils -y
+RUN apk del curl unzip binutils npm coreutils --no-cache && \
+    rm -rf /var/lib/apk/*
 
 ENV PYTHONPATH=/app
 
