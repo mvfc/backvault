@@ -71,8 +71,6 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 RUN pip install --upgrade pip && \
     pip install --no-input --no-cache-dir -r requirements.txt
 
-RUN npm install koa@3.0.1 && npm install tmp@0.2.4
-
 RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev --no-cache && \
     rm -rf /var/lib/apk/*
 
