@@ -2,7 +2,7 @@
 
 ---
 
-<img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/3ca55b47-b1c7-4002-a167-f5752605fa1a" />
+<p align=center><img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/3ca55b47-b1c7-4002-a167-f5752605fa1a" /></p>
 
 **BackVault** is a lightweight Dockerized multi-architecture service that periodically backs up your **Bitwarden** or **Vaultwarden** vaults into password-protected encrypted files.
 It’s designed for hands-free, secure, and automated backups using the official Bitwarden CLI.
