@@ -289,7 +289,7 @@ Feel free to open a PR or discussion on GitHub.
 
 ## Support the developer
 
-Some people asked me if they could buy me a coffee or something so I set up a BuyMeACoffee. But please don't feel obliged to, I do this on my free time because I enjoy it, but any support is appreciated and help me get more free time to devote to the codebase.  
+Some people asked me if they could buy me a coffee or something so I set up a BuyMeACoffee. But please don't feel obligated to, I do this on my free time because I enjoy it, but any support is appreciated and help me get more free time to devote to the codebase.  
 
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/yellow_img.png)](https://www.buymeacoffee.com/mvfc)
 
