@@ -36,6 +36,7 @@ docker run -d \
   -e BW_SERVER="https://vault.yourdomain.com" \
   -e BACKUP_ENCRYPTION_MODE="raw" \
   -e BACKUP_INTERVAL_HOURS=12 \
+  -e TZ="Europe/Amsterdam" \
   -v /path/to/backup:/app/backups \
   -v /path/to/db:/app/db \
   -p 8080:8080 \
@@ -98,6 +99,7 @@ services:
       BACKUP_ENCRYPTION_MODE: "raw" # Use 'bitwarden' for the default format
       BACKUP_INTERVAL_HOURS: 12
       NODE_TLS_REJECT_UNAUTHORIZED: 0
+      TZ: Europe/Amsterdam # Set to your timezone according to this list https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
     volumes:
       - ./backups:/app/backups
       - ./db:/app/db
@@ -131,6 +133,7 @@ BackVault will automatically:
 | `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
+| `TZ` | Timezone for the container according to  https://en.wikipedia.org/wiki/List_of_tz_database_time_zones              | ❌        | `UTC`                         |
 
 ---
 
