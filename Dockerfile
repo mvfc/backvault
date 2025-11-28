@@ -27,13 +27,10 @@ RUN apk update && apk add --no-cache \
 
 RUN apk upgrade -a
 
-RUN set -o pipefail
-
 # Install Bitwarden CLI
 RUN set -eux; \
     echo "Installing Bitwarden CLI version: ${BW_VERSION} with Node.js $(node --version)"; \
-    npm install -g @bitwarden/cli@${BW_VERSION}; \
-    npm install -g node-forge@">=1.3.2"
+    npm install -g @bitwarden/cli@${BW_VERSION}
 
 # Install supercronic
 RUN set -eux; \
