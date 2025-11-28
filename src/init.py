@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from src.db import db_connect, put_key
 import logging
 from sys import stdout
@@ -23,8 +23,7 @@ DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
 PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
 
 # --- UI HTML ---
-HTML_FORM = open(os.path.dirname(os.path.abspath(__file__)) + "/form.html").read()
-
+HTML_FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form.html")
 
 @app.get("/health")
 def health_check() -> dict:
@@ -32,8 +31,8 @@ def health_check() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> str:
-    return HTML_FORM
+def index() -> FileResponse:
+    return FileResponse(HTML_FORM, media_type="text/html")
 
 
 @app.post("/init")
