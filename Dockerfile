@@ -28,12 +28,13 @@ RUN apk update && apk add --no-cache \
 RUN apk upgrade -a
 
 # Install Bitwarden CLI
-RUN set -eux; \
+RUN set -euxo pipefail; \
     echo "Installing Bitwarden CLI version: ${BW_VERSION} with Node.js $(node --version)"; \
+    npm install -g node-forge@">=1.3.2"; \
     npm install -g @bitwarden/cli@${BW_VERSION}
 
 # Install supercronic
-RUN set -eux; \
+RUN set -euxo pipefail; \
     echo "Installing supercronic for ${TARGETARCH}"; \
     \
     case "${TARGETARCH}" in \
@@ -68,7 +69,7 @@ COPY --chown=1000:1000 ./cleanup.sh /app/cleanup.sh
 RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 
 # Install Python dependencies
-RUN pip install --upgrade pip && \
+RUN pip install --upgrade pip --no-cache-dir && \
     pip install --no-input --no-cache-dir -r requirements.txt
 
 RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev --no-cache && \

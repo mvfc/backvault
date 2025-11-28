@@ -5,6 +5,7 @@ import uuid
 import logging
 from sys import stdout
 import os
+from src.utils import validate_path
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -15,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def init_db(db_path: str, PRAGMA_KEY_FILE: str) -> None:
+    try:
+        PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
+        db_path = validate_path(db_path, "/app")
+    except Exception as e:
+        logging.error(f"Invalid PRAGMA_KEY_FILE or db_path path: {e}")
+        return
     logging.info(
         f"Initializing database, attempting to find or create pragma key at {PRAGMA_KEY_FILE}"
     )
@@ -69,6 +76,12 @@ def init_db(db_path: str, PRAGMA_KEY_FILE: str) -> None:
 def db_connect(
     db_path: str, PRAGMA_KEY_FILE: str
 ) -> tuple[sqlcipher3.Connection | None, sqlcipher3.Cursor | None]:
+    try:
+        PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
+        db_path = validate_path(db_path, "/app")
+    except Exception as e:
+        logging.error(f"Invalid PRAGMA_KEY_FILE or db_path path: {e}")
+        return None, None
     logging.info(f"Connecting to database at {db_path}")
     if not os.path.exists(db_path):
         logging.error("Database file does not exist.")

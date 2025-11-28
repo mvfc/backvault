@@ -1,10 +1,10 @@
 import os
 import logging
-from src.bw_client import BitwardenClient, BitwardenError
+from src.bw_client import BitwardenClient
 from datetime import datetime
 from sys import stdout
 from src.db import db_connect, get_key
-from pathlib import Path
+from src.utils import validate_path
 import re
 
 logging.basicConfig(
@@ -21,39 +21,13 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
 
-def _validate_path(input_content: str | None, allowed_base: str = "/app") -> str:
-    """
-    Validate that file paths are within the allowed directories.
-    Prevents path traversal attacks.
-    """
-    if not input_content:
-        return ""  # Allow empty paths (optional parameters)
-    
-    input_path = Path(input_content).resolve()
-    allowed_path = Path(allowed_base).resolve()
-    temp_path = Path("/tmp").resolve()
-    
-    try:
-        input_path.relative_to(allowed_path)
-    except ValueError:
-        try:
-            input_path.relative_to(temp_path)
-        except ValueError:
-            raise BitwardenError(f"Invalid path: must be within {allowed_base}")
-    
-    # Validate filename contains only safe characters
-    if not re.match(r'^[a-zA-Z0-9._-]+$', input_path.name):
-        raise BitwardenError("Invalid filename: only alphanumeric, dots, dashes allowed")
-    
-    return str(input_path)
-
 
 def main():
     # Database setup
     DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
-    DB_PATH = _validate_path(DB_PATH, "/app")
+    DB_PATH = validate_path(DB_PATH, "/app")
     PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
-    PRAGMA_KEY_FILE = _validate_path(PRAGMA_KEY_FILE, "/app")
+    PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
     db_conn, db_cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not db_conn or not db_cursor:
         return
@@ -65,14 +39,20 @@ def main():
     file_pw = get_key(db_conn, "file_password")
 
     server = require_env("BW_SERVER")
-    if re.match(r'^(?:https?://)?(?:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|localhost)(:\d+)?(/[a-zA-Z0-9\-\._~/]*)?$', server) is None:
+    if (
+        re.match(
+            r"^(?:https?://)?(?:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|localhost)(:\d+)?(/[a-zA-Z0-9\-\._~/]*)?$",
+            server,
+        )
+        is None
+    ):
         logger.error(f"Invalid BW_SERVER URL: '{server}'")
         return
 
     # Configuration
-    backup_dir = "/app/backups" if not os.getenv("TEST_MODE") else "/tmp"
+    backup_dir = "/app/backups" if os.getenv("TEST_MODE") is None else "/tmp"
     log_file = os.getenv("LOG_FILE")  # Optional log file
-    log_file = _validate_path(log_file, "/app")
+    log_file = validate_path(log_file, "/app")
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
 
     if encryption_mode not in ["bitwarden", "raw"]:

@@ -8,6 +8,7 @@ from sys import stdout
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
+from src.utils import validate_path, BitwardenError
 
 # Constants for encryption
 SALT_SIZE = 16
@@ -24,12 +25,6 @@ logger = logging.getLogger(__name__)
 
 password_regex = re.compile(r"('--password',\s*)('[^']*')(\s*]')", re.IGNORECASE)
 unlock_regex = re.compile(r"('unlock',\s*)('[^']*\s*-)", re.IGNORECASE)
-
-
-class BitwardenError(Exception):
-    """Base exception for Bitwarden wrapper."""
-
-    pass
 
 
 class BitwardenClient:
@@ -108,6 +103,7 @@ class BitwardenClient:
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
+
         # Redact sensitive values before logging
         def _redact_cmd(cmd):
             redacted = []
@@ -122,11 +118,12 @@ class BitwardenClient:
                     skip_next = True
                 else:
                     # For direct password (e.g. `bw unlock <password>`) redact if flag is not used
-                    if i > 0 and cmd[i-1] == "unlock":
+                    if i > 0 and cmd[i - 1] == "unlock":
                         redacted.append("[REDACTED]")
                     else:
                         redacted.append(arg)
             return redacted
+
         logger.debug(f"Running command: {' '.join(_redact_cmd(full_cmd))}")
         try:
             result = sprun(
@@ -288,6 +285,11 @@ class BitwardenClient:
 
     def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
         """Exports using Bitwarden's built-in encryption."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
         logger.info(f"Exporting with Bitwarden encryption to {backup_file}...")
         self._run(
             cmd=[
@@ -304,6 +306,11 @@ class BitwardenClient:
 
     def export_raw_encrypted(self, backup_file: str, file_pw: str):
         """Exports raw data and encrypts it in-memory."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
             cmd=["export", "--format", "json", "--raw"], capture_json=True

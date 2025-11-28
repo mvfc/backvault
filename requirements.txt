@@ -1,5 +1,5 @@
-sqlcipher3
-fastapi
-uvicorn
-python-multipart
-cryptography
+sqlcipher3==0.5.4
+fastapi==0.121.1
+uvicorn==0.38.0
+python-multipart==0.0.20
+cryptography==46.0.3
