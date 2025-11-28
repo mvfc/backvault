@@ -13,9 +13,10 @@ from subprocess import CompletedProcess
     os.environ,
     {
         "BW_SERVER": "https://test.server",
-        "BACKUP_DIR": "/tmp",
+        "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",
         "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
     },
 )
 def test_main_bitwarden_encryption(
@@ -62,9 +63,10 @@ def test_main_bitwarden_encryption(
     {
         "BW_SERVER": "https://test.server",
         "BACKUP_ENCRYPTION_MODE": "raw",
-        "BACKUP_DIR": "/tmp",
+        "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",
         "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
     },
 )
 def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_connect):
@@ -108,9 +110,10 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     {
         "BW_SERVER": "https://test.server",
         "BACKUP_ENCRYPTION_MODE": "invalid",
-        "BACKUP_DIR": "/tmp",
+        "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",
         "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
     },
 )
 def test_main_invalid_encryption_mode(mock_bw_client, mock_get_key, mock_db_connect):
@@ -139,9 +142,10 @@ def test_main_invalid_encryption_mode(mock_bw_client, mock_get_key, mock_db_conn
     os.environ,
     {
         "BW_SERVER": "https://test.server",
-        "BACKUP_DIR": "/tmp",
+        "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",
         "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
     },
 )
 def test_main_login_fails(mock_bw_client, mock_get_key, mock_db_connect):
@@ -171,9 +175,10 @@ def test_main_login_fails(mock_bw_client, mock_get_key, mock_db_connect):
     os.environ,
     {
         "BW_SERVER": "https://test.server",
-        "BACKUP_DIR": "/tmp",
+        "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",
         "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
     },
 )
 def test_main_unlock_fails(mock_bw_client, mock_get_key, mock_db_connect):

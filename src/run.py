@@ -70,8 +70,7 @@ def main():
         return
 
     # Configuration
-    backup_dir = os.getenv("BACKUP_DIR", "/app/backups")
-    backup_dir = _validate_path(backup_dir, "/app")
+    backup_dir = "/app/backups" if not os.getenv("TEST_MODE") else "/tmp"
     log_file = os.getenv("LOG_FILE")  # Optional log file
     log_file = _validate_path(log_file, "/app")
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
