@@ -14,3 +14,6 @@ decrypt.py
 .github/
 tests/
 *cache*/
+*trivy*
+*bandit*
+.pre-commit*

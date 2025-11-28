@@ -8,3 +8,6 @@ decrypt.py
 sqlcipher/
 db/
 *cache*/
+trivy
+*bandit*
+.pre-commit*

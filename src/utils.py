@@ -23,7 +23,7 @@ def validate_path(input_content: str | None, allowed_base: str = "/app") -> str:
     try:
         input_path.relative_to(allowed_path) if not getenv(
             "TEST_MODE"
-        ) else input_path.relative_to(Path("/tmp").resolve())
+        ) else input_path.relative_to(Path("/tmp").resolve()) # nosec
     except ValueError:
         raise BitwardenError(f"Invalid path: must be within {allowed_base}")
 

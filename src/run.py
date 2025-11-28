@@ -50,7 +50,7 @@ def main():
         return
 
     # Configuration
-    backup_dir = "/app/backups" if os.getenv("TEST_MODE") is None else "/tmp"
+    backup_dir = "/app/backups" if os.getenv("TEST_MODE") is None else "/tmp" # nosec
     log_file = os.getenv("LOG_FILE")  # Optional log file
     log_file = validate_path(log_file, "/app")
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
