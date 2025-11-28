@@ -1,9 +1,11 @@
 import os
 import logging
-from src.bw_client import BitwardenClient
+from src.bw_client import BitwardenClient, BitwardenError
 from datetime import datetime
 from sys import stdout
 from src.db import db_connect, get_key
+from pathlib import Path
+import re
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,11 +21,32 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
 
+def _validate_backup_path(self, backup_file: str, allowed_base: str = "/app/backups") -> str:
+    """
+    Validate that the backup file path is within the allowed directory.
+    Prevents path traversal attacks.
+    """
+    backup_path = Path(backup_file).resolve()
+    allowed_path = Path(allowed_base).resolve()
+    
+    try:
+        backup_path.relative_to(allowed_path)
+    except ValueError:
+        raise BitwardenError(f"Invalid backup path: must be within {allowed_base}")
+    
+    # Validate filename contains only safe characters
+    if not re.match(r'^[a-zA-Z0-9._-]+$', backup_path.name):
+        raise BitwardenError("Invalid filename: only alphanumeric, dots, dashes allowed")
+    
+    return str(backup_path)
+
 
 def main():
     # Database setup
     DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
+    _validate_backup_path(DB_PATH, "/app/db")
     PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
+    _validate_backup_path(PRAGMA_KEY_FILE, "/app/db")
     db_conn, db_cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not db_conn or not db_cursor:
         return
@@ -35,11 +58,22 @@ def main():
     file_pw = get_key(db_conn, "file_password")
 
     server = require_env("BW_SERVER")
+    if re.match(r'^(?:https?://)?(?:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|localhost)(:\d+)?(/[a-zA-Z0-9\-\._~/]*)?$', server) is None:
+        logger.error(f"Invalid BW_SERVER URL: '{server}'")
+        return
 
     # Configuration
     backup_dir = os.getenv("BACKUP_DIR", "/app/backups")
+    _validate_backup_path(backup_dir, "/app/backups")
     log_file = os.getenv("LOG_FILE")  # Optional log file
+    _validate_backup_path(log_file, "/app/logs")
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+
+    if encryption_mode not in ["bitwarden", "raw"]:
+        logger.error(
+            f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'."
+        )
+        return
 
     if log_file:
         logger.addHandler(logging.FileHandler(log_file))
