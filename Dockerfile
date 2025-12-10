@@ -23,9 +23,12 @@ RUN apk update && apk add --no-cache \
     coreutils \
     libffi-dev \
     cargo \
+    su-exec \
     && rm -rf /var/lib/apk/*
 
 RUN apk upgrade -a
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Install Bitwarden CLI
 RUN set -eux; \
@@ -54,18 +57,18 @@ RUN set -eux; \
 # Prepare working directories
 RUN mkdir -p /app/logs /app/backups /app/db /app/src /.config && \
     chmod -R 700 /app && \
-    chown -R 1000:1000 /app && \
-    chown -R 1000:1000 /.config
+    chmod -R 700 /.config
 
 # Copy project files
 WORKDIR /app
 
-COPY --chown=1000:1000 ./requirements.txt /app/requirements.txt
-COPY --chown=1000:1000 ./src /app/src
-COPY --chown=1000:1000 ./entrypoint.sh /app/entrypoint.sh
-COPY --chown=1000:1000 ./cleanup.sh /app/cleanup.sh
+COPY ./requirements.txt /app/requirements.txt
+COPY ./src /app/src
+COPY ./entrypoint.sh /app/entrypoint.sh
+COPY ./cleanup.sh /app/cleanup.sh
+COPY ./run.sh /app/run.sh
 
-RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
+RUN chmod +x /app/entrypoint.sh /app/cleanup.sh /app/run.sh
 
 # Install Python dependencies
 RUN pip install --upgrade pip --no-cache-dir && \
@@ -76,6 +79,6 @@ RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python
 
 ENV PYTHONPATH=/app
 
-USER 1000:1000
-
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+CMD ["/app/run.sh"]
