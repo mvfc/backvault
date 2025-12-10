@@ -28,8 +28,6 @@ You can use either the GitHub Registry image (`ghcr.io/mvfc/backvault`) or the D
 
 All tags up from v2.0.0 are multi-architecture images and can be deployed to Linux/AMD64, Linux/ARM64 and Linux/ARM/v7 systems by just pointing to latest or the corresponding version tag.
 
-Before running the Docker or Docker Compose commands, create the db and backup folders you will mount to on your host *WITHOUT* using sudo so they are owned by user 1000:1000 (which is unpriviledged). If you skip this step, you *MUST* do a `sudo chown -R 1000:1000 ./db` and a `sudo chown -R 1000:1000 ./backups`.
-
 ```bash
 docker run -d \
   --name backvault \
@@ -75,7 +73,7 @@ You can safely restart or update the container later without re-entering credent
 
 The new version of BackVault is built around **principle of least privilege** and **container-isolated secrets**:
 
-* 🧱 **Non-root container:** The service runs under an unprivileged user (`UID 1000`).
+* 🧱 **Non-root container:** The service runs under an unprivileged user (Default `UID 1000`).
 * 🔐 **Encrypted credential store:** All secrets (Bitwarden credentials, file encryption key and master password) are stored in an SQLCipher database using AES-256 encryption.
 * 🔄 **No plaintext environment secrets:** You no longer need to define sensitive values like `BW_PASSWORD` or `BW_CLIENT_SECRET` as environment variables.
 * 🕶️ **Ephemeral setup interface:** The setup UI is automatically destroyed after configuration to minimize attack surface and idle resource usage.
@@ -99,6 +97,8 @@ services:
       BACKUP_ENCRYPTION_MODE: "raw" # Use 'bitwarden' for the default format
       BACKUP_INTERVAL_HOURS: 12
       NODE_TLS_REJECT_UNAUTHORIZED: 0
+      PUID: 1000
+      PGID: 1000
       TZ: Europe/Amsterdam # Set to your timezone according to this list https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
     volumes:
       - ./backups:/app/backups
