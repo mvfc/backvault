@@ -25,6 +25,7 @@ PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
 # --- UI HTML ---
 HTML_FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form.html")
 
+
 @app.get("/health")
 def health_check() -> dict:
     return {"status": "ok"}
