@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, mock_open, call
 from src.db import init_db, db_connect, put_key, get_key
 import sqlcipher3
 import os
@@ -40,7 +40,6 @@ def test_init_db_new_pragma_key(
                 value TEXT NOT NULL
             )
         """)
-    conn.commit.assert_called()
     conn.close.assert_called()
 
 
@@ -93,8 +92,13 @@ def test_db_connect(mock_file_open, mock_sql_connect, mock_path_exists):
     mock_sql_connect.assert_called_once_with("/tmp/test.db")
     assert conn == mock_sql_connect.return_value
     assert cursor == conn.cursor.return_value
-    cursor.execute.assert_called_once_with("PRAGMA key='test_pragma_key';")
-    conn.commit.assert_called_once()
+    calls = [
+        call("PRAGMA key='test_pragma_key';"),
+        call("PRAGMA journal_mode = WAL"),
+        call("PRAGMA synchronous = FULL"),
+    ]
+    cursor.execute.assert_has_calls(calls)
+    assert cursor.execute.call_count == 3
 
 
 @patch("src.db.os.path.exists", return_value=False)
@@ -123,8 +127,6 @@ def test_put_key():
         "INSERT OR REPLACE INTO keys (name, value) VALUES (?, ?)",
         ("test_name", "test_value"),
     )
-    conn.commit.assert_called_once()
-
 
 def test_get_key():
     """
