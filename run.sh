@@ -39,6 +39,9 @@ EOF
         sleep 3
       done
 
+      sleep 1
+      # Give some time for UI to gracefully shutdown
+
       echo "Setup complete detected, stopping UI..."
       kill ${UI_PID} || true
       sleep 1
