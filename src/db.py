@@ -8,7 +8,7 @@ import os
 from src.utils import validate_path
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
     handlers=[logging.StreamHandler(stdout)],
 )
@@ -57,6 +57,12 @@ def init_db(db_path: str, PRAGMA_KEY_FILE: str) -> None:
     cursor.execute(f"PRAGMA {PRAGMA_KEY}")
     logging.info("Pragma set. Database encrypted.")
 
+    cursor.execute("PRAGMA journal_mode = WAL")
+    logging.debug("Enabled WAL journal mode.")
+
+    cursor.execute("PRAGMA synchronous = FULL")
+    logging.debug("Set synchronous mode to FULL.")
+
     logging.info("Creating table.")
     try:
         cursor.execute("""
@@ -100,15 +106,21 @@ def db_connect(
         return None, None
     cursor = conn.cursor()
     cursor.execute(f"PRAGMA {PRAGMA_KEY}")
-    conn.commit()
+    logging.debug("Pragma set.")
+    cursor.execute("PRAGMA journal_mode = WAL")
+    logging.debug("Enabled WAL journal mode.")
+    cursor.execute("PRAGMA synchronous = FULL")
+    logging.debug("Set synchronous mode to FULL.")
+    logging.debug("Database connection established.")
     return conn, cursor
 
 
 def put_key(conn: sqlcipher3.Connection, name, value) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO keys (name, value) VALUES (?, ?)", (name, value)
-    )
-    conn.commit()
+    with conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO keys (name, value) VALUES (?, ?)", (name, value)
+        )
+        logging.debug("Key stored in database.")
 
 
 def get_key(conn: sqlcipher3.Connection, name: str) -> str:

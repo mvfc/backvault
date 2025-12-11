@@ -28,6 +28,8 @@ You can use either the GitHub Registry image (`ghcr.io/mvfc/backvault`) or the D
 
 All tags up from v2.0.0 are multi-architecture images and can be deployed to Linux/AMD64, Linux/ARM64 and Linux/ARM/v7 systems by just pointing to latest or the corresponding version tag.
 
+If you're mounting the db to a NFS mount, make sure your NFS server has the export configured with ```no_root_squash``` and your clients mounts with ```local_lock=all,sync,intr```.
+
 ```bash
 docker run -d \
   --name backvault \
@@ -134,6 +136,7 @@ BackVault will automatically:
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
 | `TZ` | Timezone for the container according to  https://en.wikipedia.org/wiki/List_of_tz_database_time_zones              | ❌        | `UTC`                         |
+| `PUID` | 
 
 ---
 

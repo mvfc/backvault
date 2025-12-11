@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from src.db import db_connect, put_key
+from src.utils import validate_path
 import logging
 from sys import stdout
 from threading import Thread
@@ -19,8 +20,11 @@ app = FastAPI()
 
 # --- Constants ---
 DATA_DIR = os.getenv("DATA_DIR", "/app")
+DATA_DIR = validate_path(DATA_DIR, "/app")
 DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
+DB_PATH = validate_path(DB_PATH, "/app")
 PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
+PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
 
 # --- UI HTML ---
 HTML_FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form.html")
@@ -37,7 +41,7 @@ def index() -> FileResponse:
 
 
 @app.post("/init")
-async def init(
+def init(
     master_password: str = Form(...),
     client_id: str = Form(...),
     client_secret: str = Form(...),
@@ -63,7 +67,7 @@ def done() -> str:
     logging.info("Setup complete, shutting down UI...")
 
     def _shutdown():
-        time.sleep(0.5)
+        time.sleep(2)
         os.kill(os.getpid(), signal.SIGTERM)
 
     Thread(target=_shutdown).start()
