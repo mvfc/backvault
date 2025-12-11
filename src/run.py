@@ -41,7 +41,7 @@ def main():
     server = require_env("BW_SERVER")
     if (
         re.match(
-            r"^(?:https?://)?(?:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|localhost)(:\d+)?(/[a-zA-Z0-9\-\._~/]*)?$",
+            r"^(?:https?://)?(?:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|\w+)(:\d+)?(/[a-zA-Z0-9\-\._~/]*)?$",
             server,
         )
         is None
