@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -euo pipefail
 
 # If no arguments are passed, start the service. Otherwise, execute the arguments.
@@ -12,11 +12,11 @@ if [ $# -eq 0 ]; then
 
     # Prepare wrapper that runs backup
     cat > /app/run_wrapper.sh <<EOF
-#!/bin/bash
+#!/bin/sh
 set -euo pipefail
 export PATH="/usr/local/bin:\$PATH"
 $(printenv | grep -E 'BW_|BACKUP_' | sed 's/^/export /')
-/usr/local/bin/python /app/src/run.py 2>&1 | tee -a /app/logs/cron.log
+python /app/src/run.py 2>&1 | tee -a /app/logs/cron.log
 EOF
 
     chmod +x /app/run_wrapper.sh

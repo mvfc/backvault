@@ -1,4 +1,4 @@
-FROM python:3.13-alpine
+FROM dhi.io/python:3.13-alpine3.22-dev
 
 ARG BW_VERSION="2025.12.0"
 ARG SUPERCRONIC_VERSION="v0.2.41"
@@ -10,8 +10,6 @@ ARG TARGETARCH
 # Install minimal required packages
 RUN apk update && apk add --no-cache \
     curl \
-    bash \
-    unzip \
     sqlcipher \
     libressl-dev \
     sqlite-dev \
@@ -21,7 +19,6 @@ RUN apk update && apk add --no-cache \
     nodejs \
     npm \
     coreutils \
-    libffi-dev \
     cargo \
     su-exec \
     && rm -rf /var/lib/apk/*
@@ -74,7 +71,7 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh /app/run.sh
 RUN pip install --upgrade pip --no-cache-dir && \
     pip install --no-input --no-cache-dir -r requirements.txt
 
-RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev --no-cache && \
+RUN apk del curl binutils npm coreutils build-base cargo python3-dev --no-cache && \
     rm -rf /var/lib/apk/*
 
 ENV PYTHONPATH=/app

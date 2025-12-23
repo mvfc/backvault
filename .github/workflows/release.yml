@@ -7,6 +7,7 @@ on:
 env:
   REGISTRY_GHCR: ghcr.io
   REGISTRY_DOCKERHUB: docker.io
+  REGISTRY_DHI: dhi.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
@@ -49,6 +50,13 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY_DOCKERHUB }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to DHI
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_DHI }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
