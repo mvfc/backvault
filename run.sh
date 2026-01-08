@@ -4,8 +4,8 @@ set -euo pipefail
 # If no arguments are passed, start the service. Otherwise, execute the arguments.
 if [ $# -eq 0 ]; then
     echo "Initializing Backvault container..."
-    BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
-    CRON_EXPRESSION=${CRON_EXPRESSION:-"0 */$BACKUP_INTERVAL_HOURS * * *"}
+    INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
+    CRON_EXPRESSION=${CRON_EXPRESSION:-"0 */$INTERVAL_HOURS * * *"}
     UI_HOST="${SETUP_UI_HOST:-0.0.0.0}"
     UI_PORT="${SETUP_UI_PORT:-8080}"
     DB_FILE="/app/db/backvault.db"
@@ -20,7 +20,8 @@ $(printenv | grep -E 'BW_|BACKUP_' | sed 's/^/export /')
 EOF
 
     chmod +x /app/run_wrapper.sh
-
+# Cleanup pre-existing crontab
+    rm -f /app/crontab
     # Create supercronic schedule file
     cat > /app/crontab <<EOF
 # Backvault scheduled backup
