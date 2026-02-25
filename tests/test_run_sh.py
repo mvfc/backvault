@@ -9,7 +9,12 @@ import shutil
 
 @pytest.fixture
 def temp_dir():
-    """Create a temporary directory for test files."""
+    """
+    Provide a temporary directory for tests and remove it after the test finishes.
+    
+    Yields:
+        temp_dir (str): Path to a newly created temporary directory that will be deleted after use.
+    """
     temp = tempfile.mkdtemp()
     yield temp
     shutil.rmtree(temp, ignore_errors=True)
@@ -275,7 +280,11 @@ class TestRunShCommandValidation:
     """Tests for command validation when arguments are provided."""
 
     def test_allowed_bw_command(self, run_script_path):
-        """Test that 'bw' command is allowed and executed."""
+        """
+        Verify that invoking the script with the `bw` command does not trigger the disallowed-command error.
+        
+        Asserts that running the wrapper with arguments `bw --version` does not produce the specific "Error: Unknown or disallowed command" message on stderr.
+        """
         result = subprocess.run(
             ["bash", str(run_script_path), "bw", "--version"],
             capture_output=True,
@@ -457,7 +466,11 @@ class TestRunShWrapperGeneration:
     """Tests for run_wrapper.sh generation."""
 
     def test_wrapper_includes_bw_and_backup_vars(self, temp_dir):
-        """Test that wrapper script captures BW_ and BACKUP_ environment variables."""
+        """
+        Verify the generated wrapper lists and exports environment variables whose names start with `BW_` or `BACKUP_`, and excludes unrelated variables.
+        
+        Sets example `BW_` and `BACKUP_` variables, runs the wrapper-like script that emits `export` lines for matching environment entries, and asserts the expected exports appear and unrelated variables do not.
+        """
         env = os.environ.copy()
         env["BW_SERVER"] = "https://test.bitwarden.com"
         env["BACKUP_DIR"] = "/test/backups"
