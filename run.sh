@@ -5,7 +5,23 @@ set -euo pipefail
 if [ $# -eq 0 ]; then
     echo "Initializing Backvault container..."
     INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
-    CRON_EXPRESSION=${CRON_EXPRESSION:-"0 */$INTERVAL_HOURS * * *"}
+    if [ -z "${CRON_EXPRESSION:-}" ]; then
+        DAYS=$((INTERVAL_HOURS / 24))
+        HOURS=$((INTERVAL_HOURS % 24))
+
+        CRON_DAY="*"
+        if [ "$DAYS" -gt 0 ]; then
+            CRON_DAY="*/$DAYS"
+        fi
+
+        if [ "$HOURS" -gt 0 ]; then
+            CRON_HOUR="*/$HOURS"
+        else
+            CRON_HOUR="0"
+        fi
+
+        CRON_EXPRESSION="0 $CRON_HOUR $CRON_DAY * *"
+    fi
     UI_HOST="${SETUP_UI_HOST:-0.0.0.0}"
     UI_PORT="${SETUP_UI_PORT:-8080}"
     DB_FILE="/app/db/backvault.db"
@@ -49,9 +65,13 @@ EOF
       cd /app
     fi
 
-    echo "Running initial backup..."
-
-    ./run_wrapper.sh
+    BACKUP_DIR=${BACKUP_DIR:-"/app/backups"}
+    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
+        echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
+    else
+        echo "Running initial backup..."
+        ./run_wrapper.sh
+    fi
 
     echo "Starting supercronic scheduler..."
     exec /usr/local/bin/supercronic /app/crontab
