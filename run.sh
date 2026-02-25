@@ -5,10 +5,26 @@ set -euo pipefail
 if [ $# -eq 0 ]; then
     echo "Initializing Backvault container..."
     INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
-    CRON_EXPRESSION=${CRON_EXPRESSION:-"0 */$INTERVAL_HOURS * * *"}
+    if [ -z "${CRON_EXPRESSION:-}" ]; then
+        if ! [[ "$INTERVAL_HOURS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "BACKUP_INTERVAL_HOURS must be a positive integer." >&2
+            exit 1
+        fi
+
+        if (( INTERVAL_HOURS <= 23 )); then
+            CRON_EXPRESSION="0 */${INTERVAL_HOURS} * * *"
+            # Note: cron resets at midnight, so intervals that don't evenly divide 24
+            # (e.g. 7h) will have a shorter gap at the end of each day.
+        elif (( INTERVAL_HOURS % 24 == 0 )) && (( INTERVAL_HOURS / 24 <= 31 )); then
+            CRON_EXPRESSION="0 0 */$((INTERVAL_HOURS / 24)) * *"
+        else
+            echo "INTERVAL_HOURS=${INTERVAL_HOURS} cannot be represented exactly with cron. Set CRON_EXPRESSION explicitly." >&2
+            exit 1
+        fi
+    fi
     UI_HOST="${SETUP_UI_HOST:-0.0.0.0}"
     UI_PORT="${SETUP_UI_PORT:-8080}"
-    DB_FILE="/app/db/backvault.db"
+    DB_FILE="${DB_PATH:-/app/db}/backvault.db"
 
     # Prepare wrapper that runs backup
     cat > /app/run_wrapper.sh <<EOF
@@ -49,9 +65,13 @@ EOF
       cd /app
     fi
 
-    echo "Running initial backup..."
-
-    ./run_wrapper.sh
+    BACKUP_DIR="/app/backups"
+    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
+        echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
+    else
+        echo "Running initial backup..."
+        ./run_wrapper.sh
+    fi
 
     echo "Starting supercronic scheduler..."
     exec /usr/local/bin/supercronic /app/crontab
