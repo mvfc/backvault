@@ -24,7 +24,7 @@ if [ $# -eq 0 ]; then
     fi
     UI_HOST="${SETUP_UI_HOST:-0.0.0.0}"
     UI_PORT="${SETUP_UI_PORT:-8080}"
-    DB_FILE="/app/db/backvault.db"
+    DB_FILE="${DB_PATH:-/app/db}/backvault.db"
 
     # Prepare wrapper that runs backup
     cat > /app/run_wrapper.sh <<EOF
@@ -65,7 +65,7 @@ EOF
       cd /app
     fi
 
-    BACKUP_DIR=${BACKUP_DIR:-"/app/backups"}
+    BACKUP_DIR="/app/backups"
     if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
         echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
     else
