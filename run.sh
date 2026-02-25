@@ -13,6 +13,8 @@ if [ $# -eq 0 ]; then
 
         if (( INTERVAL_HOURS <= 23 )); then
             CRON_EXPRESSION="0 */${INTERVAL_HOURS} * * *"
+            # Note: cron resets at midnight, so intervals that don't evenly divide 24
+            # (e.g. 7h) will have a shorter gap at the end of each day.
         elif (( INTERVAL_HOURS % 24 == 0 )) && (( INTERVAL_HOURS / 24 <= 31 )); then
             CRON_EXPRESSION="0 0 */$((INTERVAL_HOURS / 24)) * *"
         else
