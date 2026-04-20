@@ -42,7 +42,14 @@ def main():
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
-    org_export_mode = org_export_mode_raw.decode() if org_export_mode_raw else "single"
+    raw_value = org_export_mode_raw.decode() if org_export_mode_raw else b"single"
+    if isinstance(raw_value, str):
+        raw_value = raw_value.encode()
+    org_export_mode = raw_value if raw_value in (b"single", b"multiple") else b"single"
+    if raw_value != org_export_mode:
+        logger.warning(
+            f"Invalid org_export_mode '{raw_value.decode()}', defaulting to 'single'"
+        )
     configured_org_ids = (
         [org.strip() for org in org_ids_raw.decode().split(",") if org.strip()]
         if org_ids_raw
@@ -155,9 +162,12 @@ def main():
 
             elif encryption_mode == "bitwarden":
                 for org_id in org_ids:
-                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_org-{org_id}.enc")
+                    org_file = os.path.join(
+                        backup_dir, f"backup_{timestamp}_org-{org_id}.enc"
+                    )
                     source.export_organization_bitwarden(org_file, file_pw, org_id)
                     logger.info(f"Organization export completed: {org_file}")
+                logger.info("Note: Bitwarden native format requires per-org files.")
 
         elif org_export_mode == "multiple" and has_orgs:
             for org_id in org_ids:

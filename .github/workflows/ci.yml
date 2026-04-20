@@ -2,6 +2,7 @@ name: CI
 permissions:
   contents: read
   pull-requests: write
+  packages: write
 
 on:
   push:
@@ -130,27 +131,27 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             python3 --version
 
-      - name: Verify entrypoint exists
+      - name: Verify entrypoint is executable
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
-            ls -la /app/entrypoint.sh
+            test -x /app/entrypoint.sh
 
-      - name: Verify run script exists
+      - name: Verify run script is executable
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
-            ls -la /app/run.sh
+            test -x /app/run.sh
 
-      - name: Verify required directories
+      - name: Verify required directories exist
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
-            ls -la /app/backups /app/db /app/logs
+            test -d /app/backups && test -d /app/db && test -d /app/logs
 
   docker-push:
     name: Docker Push
-    needs: docker-build
+    needs: [docker-build, lint, unit-tests]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -182,6 +183,8 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}

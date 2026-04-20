@@ -9,7 +9,6 @@ Run with: uv run pytest tests/test_cli_integration.py -v
 """
 
 import json
-import os
 from unittest.mock import patch, MagicMock
 from src.bw_client import BitwardenClient
 
@@ -18,58 +17,55 @@ class TestCLIWorkflow:
     """Tests for complete CLI workflows."""
 
     @patch("src.bw_client.sprun")
-    def test_full_backup_workflow_bitwarden_mode(self, mock_sprun):
+    def test_full_backup_workflow_bitwarden_mode(self, mock_sprun, monkeypatch):
         """
         Test complete backup workflow: login -> unlock -> export personal ->
         export orgs (single) -> logout.
 
         Uses bitwarden encryption mode.
         """
-        os.environ["TEST_MODE"] = "1"
-        try:
-            mock_sprun.side_effect = [
-                MagicMock(returncode=0, stdout="", stderr=""),
-                MagicMock(returncode=0, stdout="session_key_123", stderr=""),
-                MagicMock(returncode=0, stdout="unlocked_session", stderr=""),
-                MagicMock(returncode=0, stdout="", stderr=""),
-                MagicMock(
-                    returncode=0,
-                    stdout=json.dumps([{"id": "org1", "name": "Test Org"}]),
-                    stderr="",
-                ),
-                MagicMock(returncode=0, stdout="", stderr=""),
-                MagicMock(returncode=0, stdout="", stderr=""),
-            ]
+        monkeypatch.setenv("TEST_MODE", "1")
+        mock_sprun.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="session_key_123", stderr=""),
+            MagicMock(returncode=0, stdout="unlocked_session", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(
+                returncode=0,
+                stdout=json.dumps([{"id": "org1", "name": "Test Org"}]),
+                stderr="",
+            ),
+            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
 
-            client = BitwardenClient(
-                client_id="test_client_id",
-                client_secret="test_client_secret",
-                use_api_key=True,
-                server="https://vault.example.com",
+        client = BitwardenClient(
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            use_api_key=True,
+            server="https://vault.example.com",
+        )
+
+        client.login()
+        client.unlock("master_password")
+
+        client.export_bitwarden_encrypted("/tmp/backups/personal.enc", "file_pw")
+
+        orgs = client.list_organizations()
+        for org in orgs:
+            client.export_organization_bitwarden(
+                f"/tmp/backups/org-{org['id']}.enc", "file_pw", org["id"]
             )
 
-            client.login()
-            client.unlock("master_password")
+        client.logout()
 
-            client.export_bitwarden_encrypted("/tmp/backups/personal.enc", "file_pw")
+        assert mock_sprun.call_count == 7
+        calls = [str(c) for c in mock_sprun.call_args_list]
 
-            orgs = client.list_organizations()
-            for org in orgs:
-                client.export_organization_bitwarden(
-                    f"/tmp/backups/org-{org['id']}.enc", "file_pw", org["id"]
-                )
-
-            client.logout()
-
-            assert mock_sprun.call_count == 7
-            calls = [str(c) for c in mock_sprun.call_args_list]
-
-            assert any("login" in c and "--apikey" in c for c in calls)
-            assert any("unlock" in c for c in calls)
-            assert any("export" in c and "personal" in c for c in calls)
-            assert any("export" in c and "--organizationid" in c for c in calls)
-        finally:
-            del os.environ["TEST_MODE"]
+        assert any("login" in c and "--apikey" in c for c in calls)
+        assert any("unlock" in c for c in calls)
+        assert any("export" in c and "personal" in c for c in calls)
+        assert any("export" in c and "--organizationid" in c for c in calls)
 
 
 class TestCLIEncryption:

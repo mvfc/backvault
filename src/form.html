@@ -108,13 +108,13 @@
             <label>Backup File Password</label>
             <input type="password" name="file_password" required />
             <div class="org-section">
-                <label>Organization Export Mode</label>
-                <select name="org_export_mode">
+                <label for="org_export_mode">Organization Export Mode</label>
+                <select id="org_export_mode" name="org_export_mode">
                     <option value="single" selected>Single combined file</option>
                     <option value="multiple">Separate files per organization</option>
                 </select>
-                <label>Organization IDs (optional)</label>
-                <input type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
+                <label for="organization_ids">Organization IDs (optional)</label>
+                <input id="organization_ids" type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
                 <p class="org-hint">Leave empty to automatically export all accessible organizations.</p>
             </div>
             <button type="submit">Initialize</button>

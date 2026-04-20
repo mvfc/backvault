@@ -22,14 +22,18 @@ if ! docker buildx version &> /dev/null; then
     exit 1
 fi
 
+CREATED_BUILDER=0
 if ! docker buildx inspect &> /dev/null; then
     echo "Setting up docker buildx..."
     docker buildx create --name backvault-builder --use || true
+    CREATED_BUILDER=1
 fi
 
 cleanup() {
     echo "Cleaning up..."
-    docker buildx rm backvault-builder 2>/dev/null || true
+    if [ "$CREATED_BUILDER" = "1" ]; then
+        docker buildx rm backvault-builder 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
@@ -82,7 +86,7 @@ for platform in "${PLATFORMS[@]}"; do
     echo "Testing required directories exist..."
     docker run --rm --platform "$platform" \
         "${IMAGE_NAME}:${platform_tag}-test" \
-        test -d /app/backups /app/db /app/logs
+        sh -c 'test -d /app/backups && test -d /app/db && test -d /app/logs'
 
     echo "Testing environment variables..."
     docker run --rm --platform "$platform" \

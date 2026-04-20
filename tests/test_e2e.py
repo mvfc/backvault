@@ -49,6 +49,16 @@ def vaultwarden_container():
         yield container_name
         return
 
+    result = subprocess.run(
+        ["docker", "ps", "--filter", "publish=8080", "--format", "{{.Names}}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        print(f"Using existing container on port 8080: {result.stdout.strip()}")
+        yield result.stdout.strip()
+        return
+
     print(f"Starting Vaultwarden container: {container_name}")
     subprocess.run(
         [
@@ -216,10 +226,19 @@ class TestE2EBackup:
         """Test backing up personal vault with raw (AES-256-GCM) encryption."""
         from src.bw_client import BitwardenClient
 
+        old_test_mode = os.environ.get("TEST_MODE")
+        os.environ["TEST_MODE"] = "1"
+
         client = BitwardenClient(session=bw_session, server=VAULTWARDEN_URL)
 
         backup_file = tmp_path / "personal_raw.enc"
-        client.export_raw_encrypted(str(backup_file), "backup_password")
+        try:
+            client.export_raw_encrypted(str(backup_file), "backup_password")
+        finally:
+            if old_test_mode is not None:
+                os.environ["TEST_MODE"] = old_test_mode
+            else:
+                os.environ.pop("TEST_MODE", None)
 
         assert backup_file.exists()
         assert backup_file.stat().st_size > 0

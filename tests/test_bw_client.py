@@ -1,5 +1,4 @@
 import json
-import os
 import pytest
 from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
@@ -228,34 +227,32 @@ def test_list_organizations(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
-def test_export_organization_bitwarden(mock_sprun):
+def test_export_organization_bitwarden(mock_sprun, monkeypatch):
     """
     Tests organization export with Bitwarden encryption.
     """
+    monkeypatch.setenv("TEST_MODE", "1")
     mock_sprun.return_value.returncode = 0
     mock_sprun.return_value.stdout = ""
 
     client = BitwardenClient(session="test_session")
 
-    os.environ["TEST_MODE"] = "1"
-    try:
-        client.export_organization_bitwarden(
-            "/tmp/backups/org.enc", "file_pw", "org123"
-        )
-    except Exception:
-        pass
-    finally:
-        del os.environ["TEST_MODE"]
+    client.export_organization_bitwarden("/tmp/backups/org.enc", "file_pw", "org123")
 
     mock_sprun.assert_called_once()
+    call_args = str(mock_sprun.call_args)
+    assert "--organizationid" in call_args
+    assert "org123" in call_args
+    assert "/tmp/backups/org.enc" in call_args
 
 
 @patch("src.bw_client.sprun")
 @patch("builtins.open", new_callable=MagicMock)
-def test_export_organization_raw_encrypted(mock_file, mock_sprun):
+def test_export_organization_raw_encrypted(mock_file, mock_sprun, monkeypatch):
     """
     Tests organization export with raw (AES-256-GCM) encryption.
     """
+    monkeypatch.setenv("TEST_MODE", "1")
     mock_sprun.return_value = MagicMock(
         returncode=0,
         stdout=json.dumps({"items": [{"id": "1", "name": "Item 1"}]}),
@@ -264,17 +261,14 @@ def test_export_organization_raw_encrypted(mock_file, mock_sprun):
 
     client = BitwardenClient(session="test_session")
 
-    os.environ["TEST_MODE"] = "1"
-    try:
-        client.export_organization_raw_encrypted(
-            "/tmp/backups/org.enc", "file_pw", "org123"
-        )
-    except Exception:
-        pass
-    finally:
-        del os.environ["TEST_MODE"]
+    client.export_organization_raw_encrypted(
+        "/tmp/backups/org.enc", "file_pw", "org123"
+    )
 
     mock_sprun.assert_called()
+    call_args = str(mock_sprun.call_args)
+    assert "--organizationid" in call_args
+    assert "org123" in call_args
 
 
 @patch("src.bw_client.sprun")

@@ -4,7 +4,7 @@ This document describes how to run tests for Backvault.
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.12+
 - [uv](https://github.com/astral-sh/uv) package manager
 - Docker (for Docker/E2E tests)
 - Bitwarden CLI (`bw`)
@@ -47,13 +47,13 @@ docker run -d --name vaultwarden-test \
   vaultwarden/server:latest
 ```
 
-2. Wait for it to be ready (~10 seconds)
+## Wait for it to be ready (~10 seconds)
 
 ```bash
 sleep 10
 ```
 
-3. Set environment variables:
+## Set environment variables
 
 ```bash
 export VAULTWARDEN_URL=http://localhost:8080
@@ -62,7 +62,7 @@ export BW_TEST_PASSWORD=your-test-password
 export BW_TEST_MASTER_PASSWORD=your-master-password
 ```
 
-4. Run E2E tests:
+## Run E2E tests
 
 ```bash
 uv run pytest tests/test_e2e.py -v
@@ -92,13 +92,14 @@ bw status
 ### Multi-Arch Build
 
 ```bash
-# Build for all platforms
-docker buildx build --platform=linux/amd64,linux/arm64,linux/arm/v7 --load .
+# Build and test per platform (recommended)
+for platform in linux/amd64 linux/arm64 linux/arm/v7; do
+    docker buildx build --platform=$platform --load -t myimage:$(echo $platform | tr '/' '-') .
+    docker run --rm --platform $platform myimage:$(echo $platform | tr '/' '-') bw --version
+done
 
-# Test each platform
-docker run --rm --platform linux/amd64 <image> bw --version
-docker run --rm --platform linux/arm64 <image> bw --version
-docker run --rm --platform linux/arm/v7 <image> bw --version
+# Or use the provided test script
+./tests/docker_test.sh
 ```
 
 ### Run Full Docker Test Suite
