@@ -48,6 +48,12 @@ docker run -d \
 
 ---
 
+## 🔒Credentials
+
+The credentials used here are your master password (necessary to unlock the Vault), API Client and Secret (which can be found under Settings > Security > Keys on both Bitwarden and Vaultwarden web) and an encryption password for the backup.
+
+---
+
 ## 🧰 Initial Setup Flow
 
 BackVault now includes a **secure one-time web-based setup UI** that replaces the need to pass sensitive credentials via environment variables.

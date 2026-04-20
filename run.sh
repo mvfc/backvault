@@ -6,25 +6,25 @@ if [ $# -eq 0 ]; then
     echo "Initializing Backvault container..."
     INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-12}
     if [ -z "${CRON_EXPRESSION:-}" ]; then
-        DAYS=$((INTERVAL_HOURS / 24))
-        HOURS=$((INTERVAL_HOURS % 24))
-
-        CRON_DAY="*"
-        if [ "$DAYS" -gt 0 ]; then
-            CRON_DAY="*/$DAYS"
+        if ! [[ "$INTERVAL_HOURS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "BACKUP_INTERVAL_HOURS must be a positive integer." >&2
+            exit 1
         fi
 
-        if [ "$HOURS" -gt 0 ]; then
-            CRON_HOUR="*/$HOURS"
+        if (( INTERVAL_HOURS <= 23 )); then
+            CRON_EXPRESSION="0 */${INTERVAL_HOURS} * * *"
+            # Note: cron resets at midnight, so intervals that don't evenly divide 24
+            # (e.g. 7h) will have a shorter gap at the end of each day.
+        elif (( INTERVAL_HOURS % 24 == 0 )) && (( INTERVAL_HOURS / 24 <= 31 )); then
+            CRON_EXPRESSION="0 0 */$((INTERVAL_HOURS / 24)) * *"
         else
-            CRON_HOUR="0"
+            echo "INTERVAL_HOURS=${INTERVAL_HOURS} cannot be represented exactly with cron. Set CRON_EXPRESSION explicitly." >&2
+            exit 1
         fi
-
-        CRON_EXPRESSION="0 $CRON_HOUR $CRON_DAY * *"
     fi
     UI_HOST="${SETUP_UI_HOST:-0.0.0.0}"
     UI_PORT="${SETUP_UI_PORT:-8080}"
-    DB_FILE="/app/db/backvault.db"
+    DB_FILE="${DB_PATH:-/app/db}/backvault.db"
 
     # Prepare wrapper that runs backup
     cat > /app/run_wrapper.sh <<EOF
