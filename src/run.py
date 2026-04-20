@@ -140,19 +140,24 @@ def main():
 
         # Export organizations
         if org_export_mode == "single" and has_orgs:
-            all_org_data = {}
-            for org_id in org_ids:
-                org_data = source.export_organization_raw(org_id)
-                org_name = org_data.get("name", org_id)
-                all_org_data[org_id] = org_data
-                logger.info(f"Fetched org data: {org_name} ({org_id})")
+            if encryption_mode == "raw":
+                all_org_data = {}
+                for org_id in org_ids:
+                    org_data = source.export_organization_raw(org_id)
+                    all_org_data[org_id] = org_data
 
-            combined_data = json.dumps(all_org_data).encode("utf-8")
-            encrypted_data = source.encrypt_data(combined_data, file_pw)
-            org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
-            with open(org_file, "wb") as f:
-                f.write(encrypted_data)
-            logger.info(f"Organization export completed to {org_file}.")
+                combined_data = json.dumps(all_org_data).encode("utf-8")
+                encrypted_data = source.encrypt_data(combined_data, file_pw)
+                org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+                with open(org_file, "wb") as f:
+                    f.write(encrypted_data)
+                logger.info(f"Organization export completed to {org_file}.")
+
+            elif encryption_mode == "bitwarden":
+                for org_id in org_ids:
+                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_org-{org_id}.enc")
+                    source.export_organization_bitwarden(org_file, file_pw, org_id)
+                    logger.info(f"Organization export completed: {org_file}")
 
         elif org_export_mode == "multiple" and has_orgs:
             for org_id in org_ids:
