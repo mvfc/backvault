@@ -31,6 +31,8 @@ def test_main_bitwarden_encryption(
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        b"",  # organization_ids (empty)
+        b"single",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_sprun.return_value = CompletedProcess(
@@ -79,6 +81,8 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        b"",  # organization_ids (empty)
+        b"single",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_sprun.return_value = CompletedProcess(
@@ -126,6 +130,8 @@ def test_main_invalid_encryption_mode(mock_bw_client, mock_get_key, mock_db_conn
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        b"",  # organization_ids (empty)
+        b"single",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
 
@@ -158,6 +164,8 @@ def test_main_login_fails(mock_bw_client, mock_get_key, mock_db_connect):
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        b"",  # organization_ids (empty)
+        b"single",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.login.side_effect = Exception("Login failed")
@@ -191,6 +199,8 @@ def test_main_unlock_fails(mock_bw_client, mock_get_key, mock_db_connect):
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        b"",  # organization_ids (empty)
+        b"single",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.unlock.side_effect = Exception("Unlock failed")

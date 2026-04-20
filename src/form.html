@@ -40,7 +40,8 @@
         }
 
         input[type="password"],
-        input[type="text"] {
+        input[type="text"],
+        select {
             width: 100%;
             padding: 10px;
             border-radius: 8px;
@@ -52,10 +53,28 @@
             box-sizing: border-box;
         }
 
-        input:focus {
+        select {
+            cursor: pointer;
+        }
+
+        input:focus, select:focus {
             outline: none;
             border-color: #f15a24;
             background: #1b1b1b;
+        }
+
+        .org-section {
+            text-align: left;
+            margin-top: 8px;
+            padding-top: 18px;
+            border-top: 1px solid #333;
+        }
+
+        .org-hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: -14px;
+            margin-bottom: 18px;
         }
 
         button {
@@ -88,6 +107,16 @@
             <input type="password" name="master_password" required />
             <label>Backup File Password</label>
             <input type="password" name="file_password" required />
+            <div class="org-section">
+                <label>Organization Export Mode</label>
+                <select name="org_export_mode">
+                    <option value="single" selected>Single combined file</option>
+                    <option value="multiple">Separate files per organization</option>
+                </select>
+                <label>Organization IDs (optional)</label>
+                <input type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
+                <p class="org-hint">Leave empty to export all accessible organizations.</p>
+            </div>
             <button type="submit">Initialize</button>
         </form>
     </div>

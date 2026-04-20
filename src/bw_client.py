@@ -320,3 +320,58 @@ class BitwardenClient:
         )
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
+
+    def list_organizations(self) -> list[dict[str, Any]]:
+        """List all organizations the user has access to."""
+        logger.info("Fetching organization list...")
+        return self._run(["list", "organizations"])
+
+    def export_organization_raw(self, org_id: str) -> dict[str, Any]:
+        """Export organization vault as raw JSON."""
+        logger.info(f"Exporting organization vault: {org_id}")
+        return self._run(
+            cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
+            capture_json=True,
+        )
+
+    def export_organization_bitwarden(
+        self, backup_file: str, file_pw: str, org_id: str
+    ):
+        """Export organization vault using Bitwarden's built-in encryption."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
+        logger.info(f"Exporting organization {org_id} with Bitwarden encryption...")
+        self._run(
+            cmd=[
+                "export",
+                "--organizationid",
+                org_id,
+                "--output",
+                backup_file,
+                "--format",
+                "json",
+                "--password",
+                file_pw,
+            ],
+            capture_json=False,
+        )
+
+    def export_organization_raw_encrypted(
+        self, backup_file: str, file_pw: str, org_id: str
+    ):
+        """Export organization vault and encrypt it in-memory."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
+        logger.info(f"Exporting organization {org_id} with raw encryption...")
+        raw_json = self.export_organization_raw(org_id)
+        encrypted_data = self.encrypt_data(
+            json.dumps(raw_json).encode("utf-8"), file_pw
+        )
+        with open(backup_file, "wb") as f:
+            f.write(encrypted_data)

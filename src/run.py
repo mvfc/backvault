@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from src.bw_client import BitwardenClient
 from datetime import datetime
@@ -37,6 +38,16 @@ def main():
     client_secret = get_key(db_conn, "client_secret")
     master_pw = get_key(db_conn, "master_password")
     file_pw = get_key(db_conn, "file_password")
+
+    # Organization configuration
+    org_ids_raw = get_key(db_conn, "organization_ids")
+    org_export_mode_raw = get_key(db_conn, "org_export_mode")
+    org_export_mode = org_export_mode_raw.decode() if org_export_mode_raw else "single"
+    org_ids = (
+        [org.strip() for org in org_ids_raw.decode().split(",") if org.strip()]
+        if org_ids_raw
+        else []
+    )
 
     server = require_env("BW_SERVER")
     if (
@@ -90,21 +101,61 @@ def main():
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")
+        has_orgs = len(org_ids) > 0
+
+        # Export personal vault
+        if org_export_mode == "multiple":
+            personal_file = os.path.join(backup_dir, f"backup_{timestamp}_personal.enc")
+        elif has_orgs:
+            personal_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+        else:
+            personal_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")
 
         logger.info(f"Starting export with mode: '{encryption_mode}'")
 
         if encryption_mode == "raw":
-            source.export_raw_encrypted(backup_file, file_pw)
+            source.export_raw_encrypted(personal_file, file_pw)
         elif encryption_mode == "bitwarden":
-            source.export_bitwarden_encrypted(backup_file, file_pw)
+            source.export_bitwarden_encrypted(personal_file, file_pw)
         else:
             logger.error(
                 f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'."
             )
             return
 
-        logger.info(f"Export completed successfully to {backup_file}.")
+        logger.info(f"Personal vault export completed to {personal_file}.")
+
+        # Export organizations
+        if org_export_mode == "single" and has_orgs:
+            all_org_data = {}
+            for org_id in org_ids:
+                org_data = source.export_organization_raw(org_id)
+                org_name = org_data.get("name", org_id)
+                all_org_data[org_id] = org_data
+                logger.info(f"Fetched org data: {org_name} ({org_id})")
+
+            if encryption_mode == "raw":
+                combined_data = json.dumps(all_org_data).encode("utf-8")
+                encrypted_data = source.encrypt_data(combined_data, file_pw)
+                org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+                with open(org_file, "wb") as f:
+                    f.write(encrypted_data)
+            elif encryption_mode == "bitwarden":
+                for org_id in org_ids:
+                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+                    source.export_organization_bitwarden(org_file, file_pw, org_id)
+            logger.info(f"Organization export completed to {org_file}.")
+
+        elif org_export_mode == "multiple" and has_orgs:
+            for org_id in org_ids:
+                org_file = os.path.join(
+                    backup_dir, f"backup_{timestamp}_org-{org_id}.enc"
+                )
+                if encryption_mode == "raw":
+                    source.export_organization_raw_encrypted(org_file, file_pw, org_id)
+                elif encryption_mode == "bitwarden":
+                    source.export_organization_bitwarden(org_file, file_pw, org_id)
+                logger.info(f"Organization export completed: {org_file}")
     finally:
         source.logout()
         logger.info("Successfully logged out.")

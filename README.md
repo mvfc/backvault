@@ -18,6 +18,7 @@ It’s designed for hands-free, secure, and automated backups using the official
 * ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
 * 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden
 * 🐳 Runs fully containerized — no setup or local dependencies required
+* 🏢 **Multi-Organization Support**: Export multiple organizations with flexible output options
 
 ---
 
@@ -84,6 +85,27 @@ Together, these changes make BackVault one of the most secure self-hosted Bitwar
 
 ---
 
+## 🏢 Multi-Organization Export
+
+BackVault supports backing up **multiple organizations** from your Bitwarden account. During setup, you can configure:
+
+1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to export all accessible organizations.
+2. **Export Mode**: Choose how organizations are exported:
+   - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`)
+   - **Separate files**: Each org exported to its own file (`backup_{timestamp}_org-{org-id}.enc`)
+
+The personal vault is always exported separately (as `backup_{timestamp}.enc` or `backup_{timestamp}_personal.enc`).
+
+### Getting Organization IDs
+
+Run this command after logging in to find your organization IDs:
+
+```bash
+bw list organizations
+```
+
+---
+
 ## 🧩 Docker Compose Example
 
 Here’s how to set it up with Docker Compose for easy management:
@@ -135,8 +157,11 @@ BackVault will automatically:
 | `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
-| `TZ` | Timezone for the container according to  https://en.wikipedia.org/wiki/List_of_tz_database_time_zones              | ❌        | `UTC`                         |
-| `PUID` | 
+| `TZ` | Timezone for the container according to https://en.wikipedia.org/wiki/List_of_tz_database_time_zones | ❌ | `UTC` |
+| `PUID` | UID of the user to run as (non-root container) | ❌ | `1000` |
+| `PGID` | GID of the user to run as (non-root container) | ❌ | `1000` |
+
+> **Note:** Organization IDs and export mode are configured via the web setup UI, not environment variables. 
 
 ---
 

@@ -46,6 +46,8 @@ def init(
     client_id: str = Form(...),
     client_secret: str = Form(...),
     file_password: str = Form(...),
+    organization_ids: str = Form(""),
+    org_export_mode: str = Form("single"),
 ):
     conn, cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not conn or not cursor:
@@ -56,6 +58,8 @@ def init(
     put_key(conn, "client_id", client_id.encode())
     put_key(conn, "client_secret", client_secret.encode())
     put_key(conn, "file_password", file_password.encode())
+    put_key(conn, "organization_ids", organization_ids.encode())
+    put_key(conn, "org_export_mode", org_export_mode.encode())
 
     conn.close()
 
