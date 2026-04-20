@@ -65,7 +65,7 @@ EOF
       cd /app
     fi
 
-    BACKUP_DIR="/app/backups"
+    BACKUP_DIR=${BACKUP_DIR:-"/app/backups"}
     if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
         echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
     else
