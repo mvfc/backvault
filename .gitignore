@@ -2,6 +2,7 @@
 __pycache__/
 .ruff_cache/
 .venv/
+bin/
 backup/
 logs/
 decrypt.py

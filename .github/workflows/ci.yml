@@ -102,7 +102,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           load: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test
             ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -122,25 +121,25 @@ jobs:
       - name: Verify Python
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             python3 --version
 
       - name: Verify entrypoint exists
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             ls -la /app/entrypoint.sh
 
       - name: Verify run script exists
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             ls -la /app/run.sh
 
       - name: Verify required directories
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             ls -la /app/backups /app/db /app/logs
 
   docker-push:
