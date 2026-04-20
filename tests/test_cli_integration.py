@@ -7,6 +7,7 @@ requiring a real Vaultwarden instance.
 
 Run with: uv run pytest tests/test_cli_integration.py -v
 """
+
 import json
 import os
 from unittest.mock import patch, MagicMock

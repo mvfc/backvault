@@ -103,19 +103,20 @@ jobs:
           load: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Verify Bitwarden CLI
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             bw --version
 
       - name: Verify supercronic
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            ${{ env.IMAGE_NAME }}:${{ matrix.platform }}-test \
+            ${{ env.IMAGE_NAME }}:sanitized-${{ matrix.platform }}-test \
             supercronic --version
 
       - name: Verify Python

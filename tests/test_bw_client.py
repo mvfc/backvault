@@ -205,10 +205,12 @@ def test_list_organizations(mock_sprun):
     """
     Tests that list_organizations returns organization list.
     """
-    mock_sprun.return_value.stdout = json.dumps([
-        {"id": "org1", "name": "Org 1"},
-        {"id": "org2", "name": "Org 2"},
-    ])
+    mock_sprun.return_value.stdout = json.dumps(
+        [
+            {"id": "org1", "name": "Org 1"},
+            {"id": "org2", "name": "Org 2"},
+        ]
+    )
     mock_sprun.return_value.returncode = 0
 
     client = BitwardenClient(session="test_session")
@@ -218,7 +220,10 @@ def test_list_organizations(mock_sprun):
     assert orgs[0]["id"] == "org1"
     mock_sprun.assert_called_once_with(
         ["bw", "list", "organizations"],
-        text=True, capture_output=True, check=True, env=ANY
+        text=True,
+        capture_output=True,
+        check=True,
+        env=ANY,
     )
 
 
@@ -234,7 +239,9 @@ def test_export_organization_bitwarden(mock_sprun):
 
     os.environ["TEST_MODE"] = "1"
     try:
-        client.export_organization_bitwarden("/tmp/backups/org.enc", "file_pw", "org123")
+        client.export_organization_bitwarden(
+            "/tmp/backups/org.enc", "file_pw", "org123"
+        )
     except Exception:
         pass
     finally:
@@ -252,14 +259,16 @@ def test_export_organization_raw_encrypted(mock_file, mock_sprun):
     mock_sprun.return_value = MagicMock(
         returncode=0,
         stdout=json.dumps({"items": [{"id": "1", "name": "Item 1"}]}),
-        stderr=""
+        stderr="",
     )
 
     client = BitwardenClient(session="test_session")
 
     os.environ["TEST_MODE"] = "1"
     try:
-        client.export_organization_raw_encrypted("/tmp/backups/org.enc", "file_pw", "org123")
+        client.export_organization_raw_encrypted(
+            "/tmp/backups/org.enc", "file_pw", "org123"
+        )
     except Exception:
         pass
     finally:
@@ -273,10 +282,9 @@ def test_status(mock_sprun):
     """
     Tests status method returns vault status.
     """
-    mock_sprun.return_value.stdout = json.dumps({
-        "status": "unlocked",
-        "userId": "user123"
-    })
+    mock_sprun.return_value.stdout = json.dumps(
+        {"status": "unlocked", "userId": "user123"}
+    )
     mock_sprun.return_value.returncode = 0
 
     client = BitwardenClient(session="test_session")
@@ -284,8 +292,7 @@ def test_status(mock_sprun):
 
     assert status["status"] == "unlocked"
     mock_sprun.assert_called_once_with(
-        ["bw", "status"],
-        text=True, capture_output=True, check=True, env=ANY
+        ["bw", "status"], text=True, capture_output=True, check=True, env=ANY
     )
 
 

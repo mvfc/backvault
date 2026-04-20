@@ -12,6 +12,7 @@ Run with:
     BW_TEST_MASTER_PASSWORD=masterpassword123 \
     uv run pytest tests/test_e2e.py -v
 """
+
 import json
 import os
 import subprocess
@@ -31,7 +32,14 @@ def vaultwarden_container():
     container_name = "backvault-test-vaultwarden"
 
     result = subprocess.run(
-        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"name={container_name}",
+            "--format",
+            "{{.Names}}",
+        ],
         capture_output=True,
         text=True,
     )
@@ -275,7 +283,15 @@ class TestE2EDocker:
         """Verify entrypoint script is executable."""
         try:
             result = subprocess.run(
-                ["docker", "run", "--rm", "backvault:latest", "ls", "-la", "/app/entrypoint.sh"],
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "backvault:latest",
+                    "ls",
+                    "-la",
+                    "/app/entrypoint.sh",
+                ],
                 capture_output=True,
                 text=True,
                 check=True,

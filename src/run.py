@@ -43,7 +43,7 @@ def main():
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
     org_export_mode = org_export_mode_raw.decode() if org_export_mode_raw else "single"
-    org_ids = (
+    configured_org_ids = (
         [org.strip() for org in org_ids_raw.decode().split(",") if org.strip()]
         if org_ids_raw
         else []
@@ -99,15 +99,28 @@ def main():
             logger.error(f"Unlock failed: {e}")
             return
 
+        # Determine org IDs to export (use configured or fetch all)
+        if configured_org_ids:
+            org_ids = configured_org_ids
+            logger.info(f"Exporting configured organizations: {org_ids}")
+        else:
+            try:
+                all_orgs = source.list_organizations()
+                org_ids = [org.get("id") for org in all_orgs if org.get("id")]
+                logger.info(f"Exporting all accessible organizations: {org_ids}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch organizations: {e}. No orgs will be exported."
+                )
+                org_ids = []
+
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         has_orgs = len(org_ids) > 0
 
         # Export personal vault
-        if org_export_mode == "multiple":
+        if org_export_mode == "multiple" or has_orgs:
             personal_file = os.path.join(backup_dir, f"backup_{timestamp}_personal.enc")
-        elif has_orgs:
-            personal_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
         else:
             personal_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")
 
@@ -140,10 +153,6 @@ def main():
                 org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
                 with open(org_file, "wb") as f:
                     f.write(encrypted_data)
-            elif encryption_mode == "bitwarden":
-                for org_id in org_ids:
-                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
-                    source.export_organization_bitwarden(org_file, file_pw, org_id)
             logger.info(f"Organization export completed to {org_file}.")
 
         elif org_export_mode == "multiple" and has_orgs:
