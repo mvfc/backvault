@@ -233,31 +233,20 @@ class TestE2EBackup:
         items = json.loads(result.stdout)
         assert isinstance(items, list)
 
-    def test_backup_personal_vault_raw_mode(self, bw_session, tmp_path):
+    def test_backup_personal_vault_raw_mode(self, bw_session, tmp_path, monkeypatch):
         """Test backing up personal vault with raw (AES-256-GCM) encryption."""
         from src.bw_client import BitwardenClient
 
-        old_test_mode = os.environ.get("TEST_MODE")
-        old_appdata = os.environ.get("BITWARDENCLI_APPDATA_DIR")
-        os.environ["TEST_MODE"] = "1"
-        os.environ["BITWARDENCLI_APPDATA_DIR"] = bw_session["bw_env"][
-            "BITWARDENCLI_APPDATA_DIR"
-        ]
+        monkeypatch.setenv("TEST_MODE", "1")
+        monkeypatch.setenv(
+            "BITWARDENCLI_APPDATA_DIR",
+            bw_session["bw_env"]["BITWARDENCLI_APPDATA_DIR"],
+        )
 
         client = BitwardenClient(session=bw_session["session"], server=VAULTWARDEN_URL)
 
         backup_file = tmp_path / "personal_raw.enc"
-        try:
-            client.export_raw_encrypted(str(backup_file), "backup_password")
-        finally:
-            if old_test_mode is not None:
-                os.environ["TEST_MODE"] = old_test_mode
-            else:
-                os.environ.pop("TEST_MODE", None)
-            if old_appdata is not None:
-                os.environ["BITWARDENCLI_APPDATA_DIR"] = old_appdata
-            else:
-                os.environ.pop("BITWARDENCLI_APPDATA_DIR", None)
+        client.export_raw_encrypted(str(backup_file), "backup_password")
 
         assert backup_file.exists()
         assert backup_file.stat().st_size > 0
@@ -311,7 +300,6 @@ class TestE2EDocker:
             result = subprocess.run(
                 ["docker", "run", "--rm", "backvault:latest", "which", binary],
                 capture_output=True,
-                check=True,
             )
             assert result.returncode == 0, f"Binary {binary} not found in image"
 

@@ -42,12 +42,12 @@ def main():
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
-    raw_value = org_export_mode_raw.decode("utf-8") if org_export_mode_raw else "single"
-    org_export_mode = raw_value if raw_value in ("single", "multiple") else "single"
+    raw_value = org_export_mode_raw if org_export_mode_raw else "multiple"
+    org_export_mode = raw_value if raw_value in ("single", "multiple") else "multiple"
     if raw_value != org_export_mode:
-        logger.warning(f"Invalid org_export_mode '{raw_value}', defaulting to 'single'")
+        logger.warning(f"Invalid org_export_mode '{raw_value}', defaulting to 'multiple'")
     configured_org_ids = (
-        [org.strip() for org in org_ids_raw.decode().split(",") if org.strip()]
+        [org.strip() for org in org_ids_raw.split(",") if org.strip()]
         if org_ids_raw
         else []
     )
@@ -146,15 +146,26 @@ def main():
             if encryption_mode == "raw":
                 all_org_data = {}
                 for org_id in org_ids:
-                    org_data = source.export_organization_raw(org_id)
-                    all_org_data[org_id] = org_data
+                    try:
+                        org_data = source.export_organization_raw(org_id)
+                        all_org_data[org_id] = org_data
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to export organization {org_id}: {e}. Skipping org."
+                        )
 
-                combined_data = json.dumps(all_org_data).encode("utf-8")
-                encrypted_data = source.encrypt_data(combined_data, file_pw)
-                org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
-                with open(org_file, "wb") as f:
-                    f.write(encrypted_data)
-                logger.info(f"Organization export completed to {org_file}.")
+                if not all_org_data:
+                    logger.error(
+                        f"No organizations exported successfully. "
+                        f"Skipping combined org backup (backup_{timestamp}_orgs.enc)."
+                    )
+                else:
+                    combined_data = json.dumps(all_org_data).encode("utf-8")
+                    encrypted_data = source.encrypt_data(combined_data, file_pw)
+                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+                    with open(org_file, "wb") as f:
+                        f.write(encrypted_data)
+                    logger.info(f"Organization export completed to {org_file}.")
 
             elif encryption_mode == "bitwarden":
                 logger.error(

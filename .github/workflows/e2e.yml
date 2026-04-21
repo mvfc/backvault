@@ -8,6 +8,12 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  pull_request:
+    paths:
+      - 'tests/**'
+      - '.github/workflows/e2e.yml'
+      - 'src/**'
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: ${{ github.repository }}
@@ -16,7 +22,10 @@ env:
 jobs:
   e2e:
     name: E2E Tests
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +41,9 @@ jobs:
         with:
           platforms: linux/amd64
           load: true
-          tags: ${{ env.IMAGE_NAME }}:e2e-test
+          tags: |
+            ${{ env.IMAGE_NAME }}:e2e-test
+            backvault:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -88,12 +99,12 @@ jobs:
           uv sync --dev
 
       - name: Run E2E tests
-        run: |
-          VAULTWARDEN_URL=${{ env.VAULTWARDEN_URL }} \
-          BW_TEST_EMAIL=${{ secrets.BW_TEST_EMAIL }} \
-          BW_TEST_PASSWORD=${{ secrets.BW_TEST_PASSWORD }} \
-          BW_TEST_MASTER_PASSWORD=${{ secrets.BW_TEST_MASTER_PASSWORD }} \
-          uv run pytest tests/test_e2e.py -v --timeout=300
+        env:
+          VAULTWARDEN_URL: ${{ env.VAULTWARDEN_URL }}
+          BW_TEST_EMAIL: ${{ secrets.BW_TEST_EMAIL }}
+          BW_TEST_PASSWORD: ${{ secrets.BW_TEST_PASSWORD }}
+          BW_TEST_MASTER_PASSWORD: ${{ secrets.BW_TEST_MASTER_PASSWORD }}
+        run: uv run pytest tests/test_e2e.py -v --timeout=300
 
       - name: Cleanup Vaultwarden
         if: always()
