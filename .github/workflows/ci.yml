@@ -26,9 +26,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc libsqlite3-dev libsqlcipher-dev libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
         
       - name: Install uv
         run: pip install uv
@@ -69,12 +67,11 @@ jobs:
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
-        if: always() && (success() || failure())
+        if: success() || failure()
         with:
           name: coverage
           path: coverage.xml
           retention-days: 7
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
