@@ -42,14 +42,12 @@ def main():
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
-    raw_value = org_export_mode_raw.decode() if org_export_mode_raw else b"single"
-    if isinstance(raw_value, str):
-        raw_value = raw_value.encode()
-    org_export_mode = raw_value if raw_value in (b"single", b"multiple") else b"single"
+    raw_value = org_export_mode_raw.decode("utf-8") if org_export_mode_raw else "single"
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8")
+    org_export_mode = raw_value if raw_value in ("single", "multiple") else "single"
     if raw_value != org_export_mode:
-        logger.warning(
-            f"Invalid org_export_mode '{raw_value.decode()}', defaulting to 'single'"
-        )
+        logger.warning(f"Invalid org_export_mode '{raw_value}', defaulting to 'single'")
     configured_org_ids = (
         [org.strip() for org in org_ids_raw.decode().split(",") if org.strip()]
         if org_ids_raw

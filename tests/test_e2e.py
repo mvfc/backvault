@@ -104,12 +104,19 @@ def vaultwarden_container():
     subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
 
-@pytest.fixture(scope="module")
-def test_user(vaultwarden_container):
-    """Create test user in Vaultwarden."""
-    subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True)
+@pytest.fixture(scope="function")
+def bw_env(tmp_path_factory):
+    """Create isolated Bitwarden CLI environment."""
+    appdata = tmp_path_factory.mktemp("bw_data")
+    return {**os.environ, "BITWARDENCLI_APPDATA_DIR": str(appdata)}
 
-    subprocess.run(["bw", "logout"], capture_output=True)
+
+@pytest.fixture(scope="function")
+def test_user(vaultwarden_container, bw_env):
+    """Create test user in Vaultwarden."""
+    subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
+
+    subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
 
     result = subprocess.run(
         [
@@ -123,6 +130,7 @@ def test_user(vaultwarden_container):
         ],
         capture_output=True,
         text=True,
+        env=bw_env,
     )
 
     if result.returncode != 0 and "already exists" not in result.stderr.lower():
@@ -132,15 +140,16 @@ def test_user(vaultwarden_container):
             print(f"Register output: {result.stdout}")
             print(f"Register error: {result.stderr}")
 
-    yield {"email": TEST_EMAIL, "password": TEST_PASSWORD}
+    yield {"email": TEST_EMAIL, "password": TEST_PASSWORD, "bw_env": bw_env}
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def bw_session(test_user):
     """Create Bitwarden CLI session by logging in."""
-    subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True)
+    bw_env = test_user["bw_env"]
+    subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
 
-    subprocess.run(["bw", "logout"], capture_output=True)
+    subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
 
     result = subprocess.run(
         [
@@ -153,7 +162,7 @@ def bw_session(test_user):
         ],
         capture_output=True,
         text=True,
-        env={**os.environ, "BW_SESSION": ""},
+        env={**bw_env, "BW_SESSION": ""},
     )
 
     if result.returncode != 0:
@@ -173,21 +182,21 @@ def bw_session(test_user):
         ],
         capture_output=True,
         text=True,
-        env={**os.environ, "BW_SESSION": session},
+        env={**bw_env, "BW_SESSION": session},
     )
 
     if result.returncode != 0:
         pytest.skip(f"Cannot unlock vault: {result.stderr}")
 
     session = result.stdout.strip()
-    os.environ["BW_SESSION"] = session
+    bw_env["BW_SESSION"] = session
 
     yield session
 
-    subprocess.run(["bw", "lock"], capture_output=True)
-    subprocess.run(["bw", "logout"], capture_output=True)
-    if "BW_SESSION" in os.environ:
-        del os.environ["BW_SESSION"]
+    subprocess.run(["bw", "lock"], capture_output=True, env=bw_env)
+    subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
+    if "BW_SESSION" in bw_env:
+        del bw_env["BW_SESSION"]
 
 
 class TestE2EBackup:
@@ -337,6 +346,7 @@ class TestE2EErrorHandling:
 
     def test_unlock_with_wrong_password(self):
         """Test unlock with wrong password fails properly."""
+        orig_session = os.environ.get("BW_SESSION")
         subprocess.run(["bw", "lock"], capture_output=True)
 
         result = subprocess.run(
@@ -350,5 +360,10 @@ class TestE2EErrorHandling:
             text=True,
             env={**os.environ, "BW_SESSION": ""},
         )
+
+        if orig_session is not None:
+            os.environ["BW_SESSION"] = orig_session
+        elif "BW_SESSION" in os.environ:
+            del os.environ["BW_SESSION"]
 
         assert result.returncode != 0

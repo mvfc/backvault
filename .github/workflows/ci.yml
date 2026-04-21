@@ -101,7 +101,7 @@ jobs:
         id: platform-slug
         run: |
           PLATFORM="${{ matrix.platform }}"
-          echo "slug=${PLATFORM//\//-}" >> $GITHUB_OUTPUT
+          echo "slug=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image
         uses: docker/build-push-action@v5

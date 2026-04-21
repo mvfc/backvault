@@ -4,7 +4,8 @@
 
 set -e
 
-IMAGE_NAME="${IMAGE_NAME:-ghcr.io/$(echo $GITHUB_REPOSITORY | tr '[:upper:]' '[:lower:]')}"
+REPO_NAME="${GITHUB_REPOSITORY:-$(git rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || echo backvault)}"
+IMAGE_NAME="${IMAGE_NAME:-ghcr.io/$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')}"
 PLATFORMS=("linux/amd64" "linux/arm64" "linux/arm/v7")
 
 echo "=== Docker Image Tests ==="

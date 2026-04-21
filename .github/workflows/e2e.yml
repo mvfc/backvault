@@ -39,7 +39,7 @@ jobs:
       - name: Start Vaultwarden
         run: |
           docker run -d \
-            --name vaultwarden-test \
+            --name backvault-e2e-vaultwarden \
             -p 8080:80 \
             -e SIGNUPS_ALLOWED=true \
             -e ADMIN_TOKEN=admin_secret_token_for_testing \
