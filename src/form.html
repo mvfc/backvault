@@ -77,6 +77,13 @@
             margin-bottom: 18px;
         }
 
+        .org-warning {
+            font-size: 12px;
+            color: #ff6b6b;
+            margin-top: -14px;
+            margin-bottom: 18px;
+        }
+
         button {
             background: #f15a24;
             border: none;
@@ -110,9 +117,11 @@
             <div class="org-section">
                 <label for="org_export_mode">Organization Export Mode</label>
                 <select id="org_export_mode" name="org_export_mode">
-                    <option value="single" selected>Single combined file</option>
-                    <option value="multiple">Separate files per organization</option>
+                    <option value="single">Single combined file</option>
+                    <option value="multiple" selected>Separate files per organization</option>
                 </select>
+                <p class="org-warning" style="display:none">Warning: Single mode requires BACKUP_ENCRYPTION_MODE=raw. Use "Separate files" when encryption defaults to Bitwarden.</p>
+                <script>document.getElementById('org_export_mode').addEventListener('change',function(){document.querySelector('.org-warning').style.display=this.value==='single'?'block':'none'});</script>
                 <label for="organization_ids">Organization IDs (optional)</label>
                 <input id="organization_ids" type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
                 <p class="org-hint">Leave empty to automatically export all accessible organizations.</p>
