@@ -181,11 +181,16 @@ def main():
                 org_file = os.path.join(
                     backup_dir, f"backup_{timestamp}_org-{org_id}.enc"
                 )
-                if encryption_mode == "raw":
-                    source.export_organization_raw_encrypted(org_file, file_pw, org_id)
-                elif encryption_mode == "bitwarden":
-                    source.export_organization_bitwarden(org_file, file_pw, org_id)
-                logger.info(f"Organization export completed: {org_file}")
+                try:
+                    if encryption_mode == "raw":
+                        source.export_organization_raw_encrypted(org_file, file_pw, org_id)
+                    elif encryption_mode == "bitwarden":
+                        source.export_organization_bitwarden(org_file, file_pw, org_id)
+                    logger.info(f"Organization export completed: {org_file}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to export organization {org_id}: {e}. Skipping org."
+                    )
     finally:
         source.logout()
         logger.info("Successfully logged out.")
