@@ -7,9 +7,9 @@ PGID=${PGID:-1000}
 # Modify group if PGID provided
 if [ "$(id -g appuser)" != "$PGID" ]; then
     echo "Changing appuser group to PGID $PGID"
-    delgroup appuser >/dev/null 2>&1
-    addgroup -g "$PGID" appgroup
-    addgroup appuser appgroup
+    delgroup appuser >/dev/null 2>&1 || true
+    addgroup -g "$PGID" appgroup 2>/dev/null || true
+    addgroup appuser appgroup 2>/dev/null || true
 fi
 
 # Modify user if PUID provided
