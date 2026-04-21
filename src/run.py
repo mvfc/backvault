@@ -168,13 +168,11 @@ def main():
                     logger.info(f"Organization export completed to {org_file}.")
 
             elif encryption_mode == "bitwarden":
-                logger.error(
+                logger.warning(
                     f"org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
-                    f"Use org_export_mode='multiple' or switch to encryption_mode='raw'. "
-                    f"The 'single' mode requires export_organization_bitwarden to produce "
-                    f"backup_{timestamp}_orgs.enc which is not supported by Bitwarden CLI."
+                    f"Skipping org export. Use org_export_mode='multiple' or switch to "
+                    f"encryption_mode='raw' to export organizations."
                 )
-                return
 
         elif org_export_mode == "multiple" and has_orgs:
             for org_id in org_ids:
