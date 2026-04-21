@@ -67,12 +67,11 @@ jobs:
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
-        if: always() && (success() || failure())
+        if: success() || failure()
         with:
           name: coverage
           path: coverage.xml
           retention-days: 7
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
