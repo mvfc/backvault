@@ -122,7 +122,7 @@ def main():
         has_orgs = len(org_ids) > 0
 
         # Export personal vault
-        if org_export_mode == "multiple" or has_orgs:
+        if has_orgs:
             personal_file = os.path.join(backup_dir, f"backup_{timestamp}_personal.enc")
         else:
             personal_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")

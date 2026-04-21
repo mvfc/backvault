@@ -47,7 +47,7 @@ def init(
     client_secret: str = Form(...),
     file_password: str = Form(...),
     organization_ids: str = Form(""),
-    org_export_mode: str = Form("single"),
+    org_export_mode: str = Form("multiple"),
 ):
     conn, cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not conn or not cursor:
