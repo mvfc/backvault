@@ -55,8 +55,10 @@ def vaultwarden_container():
         text=True,
     )
     if result.stdout.strip():
-        print(f"Using existing container on port 8080: {result.stdout.strip()}")
-        yield result.stdout.strip()
+        container_names = result.stdout.strip().splitlines()
+        container_name = container_names[0] if container_names else ""
+        print(f"Using existing container on port 8080: {container_name}")
+        yield container_name
         return
 
     print(f"Starting Vaultwarden container: {container_name}")
@@ -191,7 +193,7 @@ def bw_session(test_user):
     session = result.stdout.strip()
     bw_env["BW_SESSION"] = session
 
-    yield session
+    yield {"session": session, "bw_env": bw_env}
 
     subprocess.run(["bw", "lock"], capture_output=True, env=bw_env)
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
@@ -204,14 +206,14 @@ class TestE2EBackup:
 
     def test_cli_can_login_and_unlock(self, bw_session):
         """Verify CLI can login and unlock vault."""
-        assert bw_session
-        assert len(bw_session) > 0
+        assert bw_session["session"]
+        assert len(bw_session["session"]) > 0
 
         result = subprocess.run(
             ["bw", "status"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": bw_session},
+            env={**bw_session["bw_env"], "BW_SESSION": bw_session["session"]},
         )
         assert result.returncode == 0
 
@@ -224,7 +226,7 @@ class TestE2EBackup:
             ["bw", "list", "items"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": bw_session},
+            env={**bw_session["bw_env"], "BW_SESSION": bw_session["session"]},
         )
 
         assert result.returncode == 0
@@ -236,9 +238,13 @@ class TestE2EBackup:
         from src.bw_client import BitwardenClient
 
         old_test_mode = os.environ.get("TEST_MODE")
+        old_appdata = os.environ.get("BITWARDENCLI_APPDATA_DIR")
         os.environ["TEST_MODE"] = "1"
+        os.environ["BITWARDENCLI_APPDATA_DIR"] = bw_session["bw_env"][
+            "BITWARDENCLI_APPDATA_DIR"
+        ]
 
-        client = BitwardenClient(session=bw_session, server=VAULTWARDEN_URL)
+        client = BitwardenClient(session=bw_session["session"], server=VAULTWARDEN_URL)
 
         backup_file = tmp_path / "personal_raw.enc"
         try:
@@ -248,6 +254,10 @@ class TestE2EBackup:
                 os.environ["TEST_MODE"] = old_test_mode
             else:
                 os.environ.pop("TEST_MODE", None)
+            if old_appdata is not None:
+                os.environ["BITWARDENCLI_APPDATA_DIR"] = old_appdata
+            else:
+                os.environ.pop("BITWARDENCLI_APPDATA_DIR", None)
 
         assert backup_file.exists()
         assert backup_file.stat().st_size > 0
@@ -261,7 +271,7 @@ class TestE2EBackup:
             ["bw", "list", "organizations"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": bw_session},
+            env={**bw_session["bw_env"], "BW_SESSION": bw_session["session"]},
         )
 
         assert result.returncode == 0
@@ -274,7 +284,7 @@ class TestE2EBackup:
             ["bw", "status"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": bw_session},
+            env={**bw_session["bw_env"], "BW_SESSION": bw_session["session"]},
         )
 
         assert result.returncode == 0
@@ -288,24 +298,22 @@ class TestE2EDocker:
 
     def test_docker_image_has_required_binaries(self):
         """Verify Docker image has all required binaries."""
-        required_binaries = ["bw", "supercronic", "python3"]
+        result = subprocess.run(
+            ["docker", "image", "inspect", "backvault:latest"],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            pytest.skip("Image not built yet: backvault:latest")
+
+        required_binaries = ["bw", "supercronic", "python3", "sqlcipher"]
 
         for binary in required_binaries:
             result = subprocess.run(
-                ["docker", "run", "--rm", "vaultwarden/server:latest", "which", binary],
+                ["docker", "run", "--rm", "backvault:latest", "which", binary],
                 capture_output=True,
+                check=True,
             )
-            if result.returncode == 0 and binary == "bw":
-                print(f"Found {binary} in vaultwarden image")
-                continue
-            try:
-                subprocess.run(
-                    ["docker", "run", "--rm", "backvault:latest", "which", binary],
-                    capture_output=True,
-                    check=True,
-                )
-            except subprocess.CalledProcessError:
-                pytest.skip(f"Image not built yet: {binary}")
+            assert result.returncode == 0, f"Binary {binary} not found in image"
 
     def test_entrypoint_exists(self):
         """Verify entrypoint script is executable."""
@@ -333,37 +341,26 @@ class TestE2EDocker:
 class TestE2EErrorHandling:
     """Test error handling with real Vaultwarden."""
 
-    def test_invalid_session_handling(self):
+    def test_invalid_session_handling(self, bw_env):
         """Test that invalid session is handled gracefully."""
         result = subprocess.run(
             ["bw", "status"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": "invalid_session_key"},
+            env={**bw_env, "BW_SESSION": "invalid_session_key"},
         )
 
         assert result.returncode != 0
 
-    def test_unlock_with_wrong_password(self):
+    def test_unlock_with_wrong_password(self, bw_env):
         """Test unlock with wrong password fails properly."""
-        orig_session = os.environ.get("BW_SESSION")
-        subprocess.run(["bw", "lock"], capture_output=True)
+        subprocess.run(["bw", "lock"], capture_output=True, env=bw_env)
 
         result = subprocess.run(
-            [
-                "bw",
-                "unlock",
-                "wrong_password",
-                "--raw",
-            ],
+            ["bw", "unlock", "wrong_password", "--raw"],
             capture_output=True,
             text=True,
-            env={**os.environ, "BW_SESSION": ""},
+            env={**bw_env, "BW_SESSION": ""},
         )
-
-        if orig_session is not None:
-            os.environ["BW_SESSION"] = orig_session
-        elif "BW_SESSION" in os.environ:
-            del os.environ["BW_SESSION"]
 
         assert result.returncode != 0

@@ -42,7 +42,7 @@ jobs:
             --name backvault-e2e-vaultwarden \
             -p 8080:80 \
             -e SIGNUPS_ALLOWED=true \
-            -e ADMIN_TOKEN=admin_secret_token_for_testing \
+            -e ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }} \
             vaultwarden/server:latest
 
       - name: Wait for Vaultwarden to start
@@ -61,6 +61,19 @@ jobs:
         run: |
           curl -sf http://localhost:8080/health || exit 1
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y libsqlcipher-dev
+
       - name: Install Bitwarden CLI
         run: |
           npm install -g @bitwarden/cli
@@ -77,16 +90,16 @@ jobs:
       - name: Run E2E tests
         run: |
           VAULTWARDEN_URL=${{ env.VAULTWARDEN_URL }} \
-          BW_TEST_EMAIL=e2e@test.com \
-          BW_TEST_PASSWORD=Test123! \
-          BW_TEST_MASTER_PASSWORD=Master123! \
+          BW_TEST_EMAIL=${{ secrets.BW_TEST_EMAIL }} \
+          BW_TEST_PASSWORD=${{ secrets.BW_TEST_PASSWORD }} \
+          BW_TEST_MASTER_PASSWORD=${{ secrets.BW_TEST_MASTER_PASSWORD }} \
           uv run pytest tests/test_e2e.py -v --timeout=300
 
       - name: Cleanup Vaultwarden
         if: always()
         run: |
-          docker stop vaultwarden-test || true
-          docker rm vaultwarden-test || true
+          docker stop backvault-e2e-vaultwarden || true
+          docker rm backvault-e2e-vaultwarden || true
 
       - name: Cleanup Docker buildx
         if: always()
