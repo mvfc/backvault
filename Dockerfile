@@ -28,7 +28,8 @@ RUN apk update && apk add --no-cache \
 
 RUN apk upgrade -a
 
-RUN addgroup -S appgroup 2>/dev/null || true && adduser -S appuser -G appgroup 2>/dev/null || true
+RUN if ! getent group appgroup > /dev/null 2>&1; then addgroup -S appgroup; fi && \
+    if ! id -u appuser > /dev/null 2>&1; then adduser -S appuser -G appgroup; fi
 
 # Install Bitwarden CLI
 RUN set -eux; \

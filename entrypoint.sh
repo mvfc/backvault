@@ -8,15 +8,24 @@ PGID=${PGID:-1000}
 if [ "$(id -g appuser)" != "$PGID" ]; then
     echo "Changing appuser group to PGID $PGID"
     delgroup appuser >/dev/null 2>&1 || true
-    addgroup -g "$PGID" appgroup 2>/dev/null || true
-    addgroup appuser appgroup 2>/dev/null || true
+    if ! addgroup -g "$PGID" appgroup 2>&1; then
+        echo "Error: Failed to create group appgroup with GID $PGID" >&2
+        exit 1
+    fi
+    if ! addgroup appuser appgroup 2>&1; then
+        echo "Error: Failed to add user appuser to group appgroup" >&2
+        exit 1
+    fi
 fi
 
 # Modify user if PUID provided
 if [ "$(id -u appuser)" != "$PUID" ]; then
     echo "Changing appuser UID to $PUID"
     deluser appuser >/dev/null 2>&1 || true
-    adduser -S -u "$PUID" -G appgroup appuser
+    if ! adduser -S -u "$PUID" -G appgroup appuser 2>&1; then
+        echo "Error: Failed to create user appuser with UID $PUID" >&2
+        exit 1
+    fi
 fi
 
 # Ensure permissions on mounted volumes

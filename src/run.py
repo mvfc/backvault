@@ -42,10 +42,13 @@ def main():
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
-    raw_value = org_export_mode_raw if org_export_mode_raw else "multiple"
-    org_export_mode = raw_value if raw_value in ("single", "multiple") else "multiple"
+    raw_value = org_export_mode_raw if org_export_mode_raw else "single"
+    org_export_mode = raw_value if raw_value in ("single", "multiple") else "single"
     if raw_value != org_export_mode:
-        logger.warning(f"Invalid org_export_mode '{raw_value}', defaulting to 'multiple'")
+        logger.warning(
+            f"Invalid org_export_mode '{raw_value}' (org_export_mode_raw={org_export_mode_raw!r}), "
+            f"defaulting to 'single'"
+        )
     configured_org_ids = (
         [org.strip() for org in org_ids_raw.split(",") if org.strip()]
         if org_ids_raw
@@ -117,6 +120,19 @@ def main():
                 )
                 org_ids = []
 
+        # Validate org IDs to prevent path traversal in filenames
+        safe_org_ids = []
+        for org_id in org_ids:
+            if org_id is None:
+                continue
+            safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", org_id)
+            if safe_id != org_id:
+                logger.warning(
+                    f"Org ID '{org_id}' contains unsafe characters, replaced with '{safe_id}'"
+                )
+            safe_org_ids.append(safe_id)
+        org_ids = safe_org_ids
+
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         has_orgs = len(org_ids) > 0
@@ -169,9 +185,9 @@ def main():
 
             elif encryption_mode == "bitwarden":
                 logger.warning(
-                    f"org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
-                    f"Skipping org export. Use org_export_mode='multiple' or switch to "
-                    f"encryption_mode='raw' to export organizations."
+                    "org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
+                    "Skipping org export. Use org_export_mode='multiple' or switch to "
+                    "encryption_mode='raw' to export organizations."
                 )
 
         elif org_export_mode == "multiple" and has_orgs:
@@ -181,7 +197,9 @@ def main():
                 )
                 try:
                     if encryption_mode == "raw":
-                        source.export_organization_raw_encrypted(org_file, file_pw, org_id)
+                        source.export_organization_raw_encrypted(
+                            org_file, file_pw, org_id
+                        )
                     elif encryption_mode == "bitwarden":
                         source.export_organization_bitwarden(org_file, file_pw, org_id)
                     logger.info(f"Organization export completed: {org_file}")

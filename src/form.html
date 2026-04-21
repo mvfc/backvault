@@ -116,12 +116,19 @@
             <input type="password" name="file_password" required />
             <div class="org-section">
                 <label for="org_export_mode">Organization Export Mode</label>
-                <select id="org_export_mode" name="org_export_mode">
+                <select id="org_export_mode" name="org_export_mode" aria-describedby="org-warning">
                     <option value="single">Single combined file</option>
                     <option value="multiple" selected>Separate files per organization</option>
                 </select>
-                <p class="org-warning" style="display:none">Warning: Single mode requires BACKUP_ENCRYPTION_MODE=raw. Use "Separate files" when encryption defaults to Bitwarden.</p>
-                <script>document.getElementById('org_export_mode').addEventListener('change',function(){document.querySelector('.org-warning').style.display=this.value==='single'?'block':'none'});</script>
+                <p class="org-warning" id="org-warning" hidden>Warning: Single mode requires BACKUP_ENCRYPTION_MODE=raw. Use "Separate files" when encryption defaults to Bitwarden.</p>
+                <script>
+                (function(){
+                    var select=document.getElementById('org_export_mode');
+                    var toggle=function(){document.getElementById('org-warning').hidden=select.value!=='single'};
+                    select.addEventListener('change',toggle);
+                    toggle();
+                })();
+                </script>
                 <label for="organization_ids">Organization IDs (optional)</label>
                 <input id="organization_ids" type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
                 <p class="org-hint">Leave empty to automatically export all accessible organizations.</p>

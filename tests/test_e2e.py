@@ -135,12 +135,13 @@ def test_user(vaultwarden_container, bw_env):
         env=bw_env,
     )
 
-    if result.returncode != 0 and "already exists" not in result.stderr.lower():
-        if "can only be" in result.stderr.lower():
+    if result.returncode != 0:
+        if "already exists" in result.stderr.lower():
             pass
         else:
             print(f"Register output: {result.stdout}")
             print(f"Register error: {result.stderr}")
+            pytest.fail(f"Registration failed: {result.stderr}")
 
     yield {"email": TEST_EMAIL, "password": TEST_PASSWORD, "bw_env": bw_env}
 
@@ -305,23 +306,29 @@ class TestE2EDocker:
 
     def test_entrypoint_exists(self):
         """Verify entrypoint script is executable."""
-        try:
-            result = subprocess.run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "backvault:latest",
-                    "ls",
-                    "-la",
-                    "/app/entrypoint.sh",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError:
-            pytest.skip("Image not built yet")
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "backvault:latest",
+                "ls",
+                "-la",
+                "/app/entrypoint.sh",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            err = (result.stderr or "").lower()
+            if (
+                "unable to find image" in err
+                or "pull access denied" in err
+                or "not found" in err
+            ):
+                pytest.skip("Image not built yet")
+            pytest.fail(f"Docker image check failed: {result.stderr}")
 
         assert "-rwxr-xr-x" in result.stdout
 
@@ -340,15 +347,19 @@ class TestE2EErrorHandling:
 
         assert result.returncode != 0
 
-    def test_unlock_with_wrong_password(self, bw_env):
+    def test_unlock_with_wrong_password(self, bw_session):
         """Test unlock with wrong password fails properly."""
-        subprocess.run(["bw", "lock"], capture_output=True, env=bw_env)
+        session = bw_session["session"]
+        locked_env = {**bw_session["bw_env"], "BW_SESSION": session}
+
+        result = subprocess.run(["bw", "lock"], capture_output=True, env=locked_env)
+        assert result.returncode == 0, f"Lock failed: {result.stderr}"
 
         result = subprocess.run(
             ["bw", "unlock", "wrong_password", "--raw"],
             capture_output=True,
             text=True,
-            env={**bw_env, "BW_SESSION": ""},
+            env={**locked_env, "BW_SESSION": session},
         )
 
         assert result.returncode != 0

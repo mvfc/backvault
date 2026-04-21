@@ -24,7 +24,7 @@ jobs:
     name: E2E Tests
     if: >
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +83,7 @@ jobs:
           node-version: '20'
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libsqlcipher-dev libssl-dev
 
       - name: Install Bitwarden CLI
         run: |

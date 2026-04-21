@@ -9,10 +9,8 @@ on:
 jobs:
   opencode:
     if: >
-      (startsWith(github.event.comment.body, '/oc') ||
-       startsWith(github.event.comment.body, '/opencode') ||
-       contains(github.event.comment.body, ' /oc ') ||
-       contains(github.event.comment.body, ' /opencode ')) &&
+      (matches(github.event.comment.body, '(^|\\s)/oc(\\s|$)') ||
+       matches(github.event.comment.body, '(^|\\s)/opencode(\\s|$)')) &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER' ||
        github.event.comment.author_association == 'COLLABORATOR')
@@ -28,8 +26,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libsqlcipher-dev libssl-dev
+
       - name: Run opencode
-        uses: anomalyco/opencode/github@v0
+        uses: anomalyco/opencode/github@v1.14.19
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
