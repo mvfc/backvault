@@ -26,7 +26,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install system dependencies
-        run: apt-get update && apt-get install -y libsqlcipher-dev
+        run: sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
         
       - name: Install uv
         run: pip install uv
