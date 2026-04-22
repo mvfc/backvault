@@ -169,10 +169,7 @@ def bw_session(test_user):
     )
 
     if result.returncode != 0:
-        if "not found" in result.stderr.lower() or "invalid" in result.stderr.lower():
-            pytest.skip(f"Cannot login to test Vaultwarden: {result.stderr}")
-        else:
-            pytest.fail(f"Failed to login: {result.stderr}")
+        pytest.fail(f"Login failed: {result.stderr}")
 
     session = result.stdout.strip()
 
@@ -189,7 +186,7 @@ def bw_session(test_user):
     )
 
     if result.returncode != 0:
-        pytest.skip(f"Cannot unlock vault: {result.stderr}")
+        pytest.fail(f"Unlock failed: {result.stderr}")
 
     session = result.stdout.strip()
     bw_env["BW_SESSION"] = session

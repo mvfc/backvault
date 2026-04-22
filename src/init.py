@@ -53,6 +53,10 @@ def init(
     if not conn or not cursor:
         return HTMLResponse("Database connection failed", status_code=500)
 
+    # Validate org_export_mode against allowlist
+    if org_export_mode not in ("single", "multiple"):
+        org_export_mode = "single"
+
     # Store encrypted passwords and keys
     put_key(conn, "master_password", master_password.encode())
     put_key(conn, "client_id", client_id.encode())

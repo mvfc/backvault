@@ -27,10 +27,10 @@ def test_main_bitwarden_encryption(
     """
     mock_db_connect.return_value = (MagicMock(), MagicMock())
     mock_get_key.side_effect = [
-        "test_client_id",
-        "test_client_secret",
-        "test_master_pw",
-        "test_file_pw",
+        b"test_client_id",
+        b"test_client_secret",
+        b"test_master_pw",
+        b"test_file_pw",
         "",  # organization_ids (empty)
         "multiple",  # org_export_mode
     ]
@@ -49,12 +49,12 @@ def test_main_bitwarden_encryption(
     mock_bw_client.assert_called_once_with(
         bw_cmd="bw",
         server="https://test.server",
-        client_id="test_client_id",
-        client_secret="test_client_secret",
+        client_id=b"test_client_id",
+        client_secret=b"test_client_secret",
         use_api_key=True,
     )
     mock_client_instance.login.assert_called_once()
-    mock_client_instance.unlock.assert_called_once_with("test_master_pw")
+    mock_client_instance.unlock.assert_called_once_with(b"test_master_pw")
     mock_client_instance.export_bitwarden_encrypted.assert_called_once()
     mock_client_instance.logout.assert_called_once()
     mock_client_instance.list_organizations.assert_called_once()
@@ -81,10 +81,10 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     """
     mock_db_connect.return_value = (MagicMock(), MagicMock())
     mock_get_key.side_effect = [
-        "test_client_id",
-        "test_client_secret",
-        "test_master_pw",
-        "test_file_pw",
+        b"test_client_id",
+        b"test_client_secret",
+        b"test_master_pw",
+        b"test_file_pw",
         "",  # organization_ids (empty)
         "multiple",  # org_export_mode
     ]
@@ -103,12 +103,12 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     mock_bw_client.assert_called_once_with(
         bw_cmd="bw",
         server="https://test.server",
-        client_id="test_client_id",
-        client_secret="test_client_secret",
+        client_id=b"test_client_id",
+        client_secret=b"test_client_secret",
         use_api_key=True,
     )
     mock_client_instance.login.assert_called_once()
-    mock_client_instance.unlock.assert_called_once_with("test_master_pw")
+    mock_client_instance.unlock.assert_called_once_with(b"test_master_pw")
     mock_client_instance.export_raw_encrypted.assert_called_once()
     mock_client_instance.logout.assert_called_once()
     mock_client_instance.list_organizations.assert_called_once()
@@ -134,10 +134,10 @@ def test_main_invalid_encryption_mode(mock_bw_client, mock_get_key, mock_db_conn
     """
     mock_db_connect.return_value = (MagicMock(), MagicMock())
     mock_get_key.side_effect = [
-        "test_client_id",
-        "test_client_secret",
-        "test_master_pw",
-        "test_file_pw",
+        b"test_client_id",
+        b"test_client_secret",
+        b"test_master_pw",
+        b"test_file_pw",
         "",  # organization_ids (empty)
         "multiple",  # org_export_mode
     ]
@@ -168,10 +168,10 @@ def test_main_login_fails(mock_bw_client, mock_get_key, mock_db_connect):
     """
     mock_db_connect.return_value = (MagicMock(), MagicMock())
     mock_get_key.side_effect = [
-        "test_client_id",
-        "test_client_secret",
-        "test_master_pw",
-        "test_file_pw",
+        b"test_client_id",
+        b"test_client_secret",
+        b"test_master_pw",
+        b"test_file_pw",
         "",  # organization_ids (empty)
         "multiple",  # org_export_mode
     ]

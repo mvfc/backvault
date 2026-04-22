@@ -8,14 +8,15 @@ PGID=${PGID:-1000}
 if [ "$(id -g appuser)" != "$PGID" ]; then
     echo "Changing appuser group to PGID $PGID"
     delgroup appuser >/dev/null 2>&1 || true
-    if ! addgroup -g "$PGID" appgroup 2>&1; then
-        echo "Error: Failed to create group appgroup with GID $PGID" >&2
-        exit 1
+    if getent group appgroup >/dev/null 2>&1; then
+        current_gid=$(getent group appgroup | cut -d: -f3)
+        if [ "$current_gid" != "$PGID" ]; then
+            echo "Warning: appgroup exists with GID $current_gid, using existing group"
+        fi
+    else
+        addgroup -g "$PGID" appgroup
     fi
-    if ! addgroup appuser appgroup 2>&1; then
-        echo "Error: Failed to add user appuser to group appgroup" >&2
-        exit 1
-    fi
+    addgroup appuser appgroup 2>/dev/null || true
 fi
 
 # Modify user if PUID provided

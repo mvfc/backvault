@@ -17,7 +17,8 @@ on:
 
 env:
   IMAGE_NAME: ${{ github.repository }}
-  VAULTWARDEN_URL: http://localhost:8080
+  VAULTWARDEN_PORT: '8089'
+  VAULTWARDEN_URL: http://localhost:8089
 
 jobs:
   e2e:
@@ -37,40 +38,48 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          platforms: linux/amd64
-          load: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:e2e-test
-            backvault:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --tag "${{ env.IMAGE_NAME }}:e2e-test" \
+            --tag backvault:latest \
+            .
 
       - name: Start Vaultwarden
         run: |
+          docker rm -f backvault-e2e-vaultwarden 2>/dev/null || true
           docker run -d \
             --name backvault-e2e-vaultwarden \
-            -p 8080:80 \
+            -p "${{ env.VAULTWARDEN_PORT }}:80" \
             -e SIGNUPS_ALLOWED=true \
             -e ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }} \
+            -e I_REALLY_WANT_VOLATILE_STORAGE=true \
             vaultwarden/server:latest
-
-      - name: Wait for Vaultwarden to start
-        run: |
-          echo "Waiting for Vaultwarden..."
+          VW_IP=$(docker inspect backvault-e2e-vaultwarden --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-              echo "Vaultwarden is ready"
-              break
+            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Vaultwarden is ready (HTTP $HTTP_CODE)"
+              exit 0
             fi
-            echo "Attempt $i/30: Waiting..."
+            echo "Attempt $i/30: Waiting... (HTTP $HTTP_CODE)"
             sleep 2
           done
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
+          echo "Error: Vaultwarden failed to start (HTTP $HTTP_CODE)"
+          docker logs backvault-e2e-vaultwarden
+          docker stop backvault-e2e-vaultwarden 2>/dev/null || true
+          docker rm backvault-e2e-vaultwarden 2>/dev/null || true
+          exit 1
 
       - name: Verify Vaultwarden is running
         run: |
-          curl -sf http://localhost:8080/health || exit 1
+          VW_IP=$(docker inspect backvault-e2e-vaultwarden --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Vaultwarden health check failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -109,10 +118,10 @@ jobs:
       - name: Cleanup Vaultwarden
         if: always()
         run: |
-          docker stop backvault-e2e-vaultwarden || true
-          docker rm backvault-e2e-vaultwarden || true
+          docker stop backvault-e2e-vaultwarden 2>/dev/null || true
+          docker rm backvault-e2e-vaultwarden 2>/dev/null || true
 
       - name: Cleanup Docker buildx
         if: always()
         run: |
-          docker buildx prune --all || true
+          docker buildx prune --all -f 2>/dev/null || true

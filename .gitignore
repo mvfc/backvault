@@ -12,3 +12,4 @@ db/
 trivy
 *bandit*
 .pre-commit*
+.secrets
