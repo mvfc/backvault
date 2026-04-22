@@ -46,6 +46,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Cleanup appgroup
+        run: |
+          sudo delgroup appgroup 2>/dev/null || true
+          sudo deluser appuser 2>/dev/null || true
+
       - name: Validate ADMIN_TOKEN
         env:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
