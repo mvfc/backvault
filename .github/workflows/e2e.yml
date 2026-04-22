@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: docker.io/mvflc/backvault
   VAULTWARDEN_PORT: '8888'
   VAULTWARDEN_URL: http://localhost:8888
 
@@ -60,13 +60,10 @@ jobs:
             exit 1
           fi
 
-      - name: Build Docker image
+      - name: Pull test image
         run: |
-          docker build \
-            --platform linux/amd64 \
-            --tag "${{ env.IMAGE_NAME }}:e2e-test" \
-            --tag backvault:latest \
-            .
+          docker pull docker.io/mvflc/backvault:test
+          docker tag docker.io/mvflc/backvault:test ${{ env.IMAGE_NAME }}:test
 
       - name: Wait for Vaultwarden
         run: |
@@ -119,7 +116,8 @@ jobs:
           BW_TEST_EMAIL: ${{ secrets.BW_TEST_EMAIL }}
           BW_TEST_PASSWORD: ${{ secrets.BW_TEST_PASSWORD }}
           BW_TEST_MASTER_PASSWORD: ${{ secrets.BW_TEST_MASTER_PASSWORD }}
-        run: uv run pytest tests/test_e2e.py -v -m e2e -o "addopts=" --timeout=300
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: uv run pytest tests/test_e2e.py -v -m e2e -o "addopts="
 
       - name: Cleanup Docker buildx
         if: always()

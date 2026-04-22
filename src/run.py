@@ -143,9 +143,10 @@ def main():
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        has_orgs = len(org_ids) > 0
+        has_orgs = len(org_ids) > 0 and org_export_mode != "none"
 
         # Export personal vault
+        # Use simple filename when org exports are disabled to maintain backward compatibility
         if has_orgs:
             personal_file = os.path.join(backup_dir, f"backup_{timestamp}_personal.enc")
         else:
@@ -166,10 +167,10 @@ def main():
         logger.info(f"Personal vault export completed to {personal_file}.")
 
         # Export organizations
-        # None means default to multiple (export all orgs)
+        # None means default to "none" for safe upgrade (existing users don't get unexpected exports)
         if org_export_mode is None:
-            org_export_mode = "multiple"
-            logger.info("org_export_mode not configured, defaulting to 'multiple'")
+            org_export_mode = "none"
+            logger.info("org_export_mode not configured, defaulting to 'none' for safe upgrade")
 
         if org_export_mode == "none":
             logger.info("Organization exports disabled by user configuration")
