@@ -143,7 +143,9 @@ def test_user(vaultwarden_container, bw_env):
                 "masterPassword": TEST_MASTER_PASSWORD,
             }
         ).encode(),
-        headers={"Authorization": f"Bearer {os.getenv('VAULTWARDEN_ADMIN_TOKEN', 'admin_secret_token_for_testing')}"},
+        headers={
+            "Authorization": f"Bearer {os.getenv('VAULTWARDEN_ADMIN_TOKEN', 'admin_secret_token_for_testing')}"
+        },
         method="POST",
     )
     try:
