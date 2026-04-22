@@ -358,7 +358,6 @@ class BitwardenClient:
             ],
             capture_json=False,
         )
-        )
 
     def export_organization_raw_encrypted(
         self, backup_file: str, file_pw: str, org_id: str

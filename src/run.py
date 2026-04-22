@@ -170,7 +170,9 @@ def main():
         # None means default to "none" for safe upgrade (existing users don't get unexpected exports)
         if org_export_mode is None:
             org_export_mode = "none"
-            logger.info("org_export_mode not configured, defaulting to 'none' for safe upgrade")
+            logger.info(
+                "org_export_mode not configured, defaulting to 'none' for safe upgrade"
+            )
 
         if org_export_mode == "none":
             logger.info("Organization exports disabled by user configuration")
