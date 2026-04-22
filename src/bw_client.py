@@ -353,9 +353,11 @@ class BitwardenClient:
                 backup_file,
                 "--format",
                 "encrypted_json",
+                "--password",
                 file_pw,
             ],
             capture_json=False,
+        )
         )
 
     def export_organization_raw_encrypted(
