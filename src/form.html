@@ -128,14 +128,15 @@
                     <option value="none">No organization exports (personal vault only)</option>
                     <option value="single">Single combined file (requires raw encryption)</option>
                 </select>
-                <p class="org-error" id="org-error">Single mode is not supported with Bitwarden encryption. Use "Separate files" or set BACKUP_ENCRYPTION_MODE=raw.</p>
+                <p class="org-error" id="org-error" hidden>Single mode is not supported with Bitwarden encryption. Use "Separate files" or set BACKUP_ENCRYPTION_MODE=raw.</p>
                 <script>
                 (function(){
                     var select=document.getElementById('org_export_mode');
                     var error=document.getElementById('org-error');
                     select.addEventListener('change',function(){error.hidden=select.value!=='single'});
-                    if(select.value==='single'){error.hidden=false;}
+                    error.hidden = select.value !== 'single';
                 })();
+                </script>
                 </script>
                 <label for="organization_ids">Organization IDs (optional)</label>
                 <input id="organization_ids" type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
