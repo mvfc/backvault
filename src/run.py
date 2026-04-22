@@ -143,7 +143,7 @@ def main():
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        has_orgs = len(org_ids) > 0 and org_export_mode != "none"
+        has_orgs = len(org_ids) > 0 and org_export_mode not in (None, "none")
 
         # Export personal vault
         # Use simple filename when org exports are disabled to maintain backward compatibility
