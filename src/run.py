@@ -120,7 +120,7 @@ def main():
         # Validate org IDs to prevent path traversal in filenames
         # Keep original org_ids for export calls, create separate map for safe filenames
         safe_suffixes = {}
-        seen_suffixes = {}
+        seen_suffixes = set()
         for org_id in org_ids:
             if org_id is None:
                 continue
@@ -129,14 +129,17 @@ def main():
                 logger.warning(
                     f"Org ID '{org_id}' contains unsafe characters, replaced with '{safe_id}'"
                 )
-            # Handle collisions by appending counter
-            if safe_id in seen_suffixes:
-                counter = seen_suffixes[safe_id] + 1
-                seen_suffixes[safe_id] = counter
-                safe_id = f"{safe_id}_{counter}"
-            else:
-                seen_suffixes[safe_id] = 0
-            safe_suffixes[org_id] = safe_id
+            # Handle collisions by appending counter until unique
+            candidate = safe_id
+            counter = 0
+            while candidate in seen_suffixes:
+                counter += 1
+                candidate = f"{safe_id}_{counter}"
+                logger.warning(
+                    f"Collision detected for '{safe_id}', using '{candidate}'"
+                )
+            seen_suffixes.add(candidate)
+            safe_suffixes[org_id] = candidate
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

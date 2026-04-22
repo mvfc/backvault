@@ -57,7 +57,16 @@ def vaultwarden_container():
         return
 
     result = subprocess.run(
-        ["docker", "ps", "--filter", f"publish={VAULTWARDEN_PORT}", "--format", "{{.Names}}"],
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"publish={VAULTWARDEN_PORT}",
+            "--filter",
+            "ancestor=vaultwarden/server",
+            "--format",
+            "{{.Names}}",
+        ],
         capture_output=True,
         text=True,
     )
@@ -104,8 +113,6 @@ def vaultwarden_container():
     else:
         pytest.fail("Vaultwarden failed to start")
 
-    time.sleep(5)
-
     yield container_name
 
     print(f"Stopping Vaultwarden container: {container_name}")
@@ -122,33 +129,32 @@ def bw_env(tmp_path_factory):
 
 @pytest.fixture(scope="function")
 def test_user(vaultwarden_container, bw_env):
-    """Create test user in Vaultwarden."""
-    subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
+    """Create test user in Vaultwarden via admin API."""
+    import urllib.request
+    import urllib.error
 
-    subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
-
-    result = subprocess.run(
-        [
-            "bw",
-            "register",
-            TEST_EMAIL,
-            "--password",
-            TEST_PASSWORD,
-            "--master-password",
-            TEST_MASTER_PASSWORD,
-        ],
-        capture_output=True,
-        text=True,
-        env=bw_env,
+    admin_url = VAULTWARDEN_URL.replace("http://", "http://admin:")
+    req = urllib.request.Request(
+        f"{admin_url}/admin/users",
+        data=urllib.parse.urlencode(
+            {
+                "email": TEST_EMAIL,
+                "password": TEST_PASSWORD,
+                "masterPassword": TEST_MASTER_PASSWORD,
+            }
+        ).encode(),
+        headers={"Authorization": f"Bearer {os.getenv('VAULTWARDEN_ADMIN_TOKEN', 'admin_secret_token_for_testing')}"},
+        method="POST",
     )
-
-    if result.returncode != 0:
-        if "already exists" in result.stderr.lower():
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except urllib.error.HTTPError as e:
+        if e.code == 400 and "exists" in e.read().decode().lower():
             pass
         else:
-            print(f"Register output: {result.stdout}")
-            print(f"Register error: {result.stderr}")
-            pytest.fail(f"Registration failed: {result.stderr}")
+            pytest.fail(f"Registration failed: {e}")
+    except Exception as e:
+        pytest.fail(f"Registration failed: {e}")
 
     yield {"email": TEST_EMAIL, "password": TEST_PASSWORD, "bw_env": bw_env}
 

@@ -39,6 +39,7 @@ jobs:
             core.setOutput('is_command', isCommand);
 
       - name: Install dependencies
+        if: steps.check-command.outputs.is_command == 'true'
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libsqlcipher-dev libssl-dev
 
       - name: Run opencode
