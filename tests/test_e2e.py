@@ -133,9 +133,9 @@ def test_user(vaultwarden_container, bw_env):
     import urllib.request
     import urllib.error
 
-    admin_url = VAULTWARDEN_URL.replace("http://", "http://admin:")
+    admin_url = f"{VAULTWARDEN_URL}/admin/users"
     req = urllib.request.Request(
-        f"{admin_url}/admin/users",
+        admin_url,
         data=urllib.parse.urlencode(
             {
                 "email": TEST_EMAIL,

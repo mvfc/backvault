@@ -103,7 +103,11 @@ def main():
             return
 
         # Determine org IDs to export (use configured or fetch all)
-        if configured_org_ids:
+        # Skip API call when org exports are disabled
+        if org_export_mode is None or org_export_mode == "none":
+            org_ids = []
+            logger.info("Organization exports disabled")
+        elif configured_org_ids:
             org_ids = configured_org_ids
             logger.info(f"Exporting configured organizations: {org_ids}")
         else:
@@ -177,6 +181,15 @@ def main():
         if org_export_mode == "none":
             logger.info("Organization exports disabled by user configuration")
         elif org_export_mode == "single" and has_orgs:
+            # Fail fast: single+bitwarden is an invalid combination
+            if encryption_mode == "bitwarden":
+                logger.error(
+                    "org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
+                    "Aborting backup. Use org_export_mode='multiple' or switch to "
+                    "encryption_mode='raw' to export organizations."
+                )
+                return
+
             if encryption_mode == "raw":
                 all_org_data = {}
                 for org_id in org_ids:
@@ -200,13 +213,6 @@ def main():
                     with open(org_file, "wb") as f:
                         f.write(encrypted_data)
                     logger.info(f"Organization export completed to {org_file}.")
-
-            elif encryption_mode == "bitwarden":
-                logger.warning(
-                    "org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
-                    "Skipping org export. Use org_export_mode='multiple' or switch to "
-                    "encryption_mode='raw' to export organizations."
-                )
 
         elif org_export_mode == "multiple" and has_orgs:
             for org_id in org_ids:

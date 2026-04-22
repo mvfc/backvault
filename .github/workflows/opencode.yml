@@ -30,12 +30,7 @@ jobs:
         with:
           script: |
             const body = context.payload.comment.body;
-            const isCommand = body === '/oc' ||
-              body === '/opencode' ||
-              body.startsWith('/oc ') ||
-              body.startsWith('/opencode ') ||
-              body.includes('\n/oc ') ||
-              body.includes('\n/opencode ');
+            const isCommand = /^\/(?:oc|opencode)(?:\s|$)/m.test(body);
             core.setOutput('is_command', isCommand);
 
       - name: Install dependencies

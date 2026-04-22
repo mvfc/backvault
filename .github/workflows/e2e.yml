@@ -116,7 +116,7 @@ jobs:
           BW_TEST_EMAIL: ${{ secrets.BW_TEST_EMAIL }}
           BW_TEST_PASSWORD: ${{ secrets.BW_TEST_PASSWORD }}
           BW_TEST_MASTER_PASSWORD: ${{ secrets.BW_TEST_MASTER_PASSWORD }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}:test
         run: uv run pytest tests/test_e2e.py -v -m e2e -o "addopts="
 
       - name: Cleanup Docker buildx
