@@ -28,12 +28,12 @@ RUN apk update && apk add --no-cache \
 
 RUN apk upgrade -a
 
-# Create appgroup and appuser idempotently
+# Create appgroup and appuser idempotently (GID/UID 1000 to match default PGID/PUID)
 RUN if ! getent group appgroup > /dev/null 2>&1; then \
-        addgroup -S appgroup; \
+        addgroup -S -g 1000 appgroup; \
     fi && \
     if ! getent passwd appuser > /dev/null 2>&1; then \
-        adduser -S appuser -G appgroup; \
+        adduser -S -u 1000 -G appgroup appuser; \
     fi
 
 # Install Bitwarden CLI
