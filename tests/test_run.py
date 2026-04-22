@@ -31,10 +31,15 @@ def test_main_bitwarden_encryption(
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_sprun.return_value = CompletedProcess(
         args=[], returncode=0, stdout="", stderr=""
+    )
+    mock_client_instance.list_organizations = MagicMock(
+        return_value=[{"id": "org-1"}, {"id": "org-2"}]
     )
 
     main()
@@ -52,6 +57,7 @@ def test_main_bitwarden_encryption(
     mock_client_instance.unlock.assert_called_once_with("test_master_pw")
     mock_client_instance.export_bitwarden_encrypted.assert_called_once()
     mock_client_instance.logout.assert_called_once()
+    mock_client_instance.list_organizations.assert_called_once()
 
 
 @patch("src.run.db_connect")
@@ -79,10 +85,15 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_sprun.return_value = CompletedProcess(
         args=[], returncode=0, stdout="", stderr=""
+    )
+    mock_client_instance.list_organizations = MagicMock(
+        return_value=[{"id": "org-1"}, {"id": "org-2"}]
     )
 
     main()
@@ -100,6 +111,7 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     mock_client_instance.unlock.assert_called_once_with("test_master_pw")
     mock_client_instance.export_raw_encrypted.assert_called_once()
     mock_client_instance.logout.assert_called_once()
+    mock_client_instance.list_organizations.assert_called_once()
 
 
 @patch("src.run.db_connect")
@@ -126,6 +138,8 @@ def test_main_invalid_encryption_mode(mock_bw_client, mock_get_key, mock_db_conn
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
 
@@ -158,9 +172,12 @@ def test_main_login_fails(mock_bw_client, mock_get_key, mock_db_connect):
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.login.side_effect = Exception("Login failed")
+    mock_client_instance.list_organizations = MagicMock(return_value=[{"id": "org-1"}])
 
     main()
 
@@ -191,9 +208,12 @@ def test_main_unlock_fails(mock_bw_client, mock_get_key, mock_db_connect):
         "test_client_secret",
         "test_master_pw",
         "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
     ]
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.unlock.side_effect = Exception("Unlock failed")
+    mock_client_instance.list_organizations = MagicMock(return_value=[{"id": "org-1"}])
 
     main()
 

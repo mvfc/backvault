@@ -1,0 +1,125 @@
+name: E2E Tests
+permissions:
+  contents: read
+  actions: read
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  pull_request:
+    paths:
+      - 'tests/**'
+      - '.github/workflows/e2e.yml'
+      - 'src/**'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: docker.io/mvflc/backvault
+  VAULTWARDEN_PORT: '8888'
+  VAULTWARDEN_URL: http://localhost:8888
+
+jobs:
+  e2e:
+    name: E2E Tests
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      vaultwarden:
+        image: vaultwarden/server:latest
+        env:
+          SIGNUPS_ALLOWED: "true"
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          I_REALLY_WANT_VOLATILE_STORAGE: "true"
+        ports:
+          - 8888:80
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cleanup appgroup
+        run: |
+          sudo delgroup appgroup 2>/dev/null || true
+          sudo deluser appuser 2>/dev/null || true
+
+      - name: Validate ADMIN_TOKEN
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "Error: ADMIN_TOKEN secret is required"
+            exit 1
+          fi
+
+      - name: Pull test image
+        run: |
+          docker pull docker.io/mvflc/backvault:test
+          docker tag docker.io/mvflc/backvault:test ${{ env.IMAGE_NAME }}:test
+
+      - name: Wait for Vaultwarden
+        run: |
+          for i in $(seq 1 30); do
+            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Vaultwarden is ready (HTTP $HTTP_CODE)"
+              exit 0
+            fi
+            echo "Attempt $i/30: Waiting... (HTTP $HTTP_CODE)"
+            sleep 2
+          done
+          echo "Error: Vaultwarden failed to start"
+          exit 1
+
+      - name: Verify Vaultwarden is running
+        run: |
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Vaultwarden health check failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+          echo "Vaultwarden health check passed"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libsqlcipher-dev libssl-dev
+
+      - name: Install Bitwarden CLI
+        run: |
+          npm install -g @bitwarden/cli
+
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv sync --dev
+
+      - name: Run E2E tests
+        env:
+          VAULTWARDEN_URL: ${{ env.VAULTWARDEN_URL }}
+          BW_TEST_EMAIL: ${{ secrets.BW_TEST_EMAIL }}
+          BW_TEST_PASSWORD: ${{ secrets.BW_TEST_PASSWORD }}
+          BW_TEST_MASTER_PASSWORD: ${{ secrets.BW_TEST_MASTER_PASSWORD }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}:test
+        run: uv run pytest tests/test_e2e.py -v -m e2e -o "addopts="
+
+      - name: Cleanup Docker buildx
+        if: always()
+        run: |
+          docker buildx prune --all -f 2>/dev/null || true
