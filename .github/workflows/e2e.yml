@@ -17,8 +17,8 @@ on:
 
 env:
   IMAGE_NAME: ${{ github.repository }}
-  VAULTWARDEN_PORT: '8089'
-  VAULTWARDEN_URL: http://localhost:8089
+  VAULTWARDEN_PORT: '8888'
+  VAULTWARDEN_URL: http://localhost:8888
 
 jobs:
   e2e:
@@ -28,6 +28,15 @@ jobs:
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    services:
+      vaultwarden:
+        image: vaultwarden/server:latest
+        env:
+          SIGNUPS_ALLOWED: "true"
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          I_REALLY_WANT_VOLATILE_STORAGE: "true"
+        ports:
+          - 8888:80
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +46,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate ADMIN_TOKEN
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "Error: ADMIN_TOKEN secret is required"
+            exit 1
+          fi
+
       - name: Build Docker image
         run: |
           docker build \
@@ -45,19 +61,10 @@ jobs:
             --tag backvault:latest \
             .
 
-      - name: Start Vaultwarden
+      - name: Wait for Vaultwarden
         run: |
-          docker rm -f backvault-e2e-vaultwarden 2>/dev/null || true
-          docker run -d \
-            --name backvault-e2e-vaultwarden \
-            -p "${{ env.VAULTWARDEN_PORT }}:80" \
-            -e SIGNUPS_ALLOWED=true \
-            -e ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }} \
-            -e I_REALLY_WANT_VOLATILE_STORAGE=true \
-            vaultwarden/server:latest
-          VW_IP=$(docker inspect backvault-e2e-vaultwarden --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
+            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Vaultwarden is ready (HTTP $HTTP_CODE)"
               exit 0
@@ -65,21 +72,17 @@ jobs:
             echo "Attempt $i/30: Waiting... (HTTP $HTTP_CODE)"
             sleep 2
           done
-          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
-          echo "Error: Vaultwarden failed to start (HTTP $HTTP_CODE)"
-          docker logs backvault-e2e-vaultwarden
-          docker stop backvault-e2e-vaultwarden 2>/dev/null || true
-          docker rm backvault-e2e-vaultwarden 2>/dev/null || true
+          echo "Error: Vaultwarden failed to start"
           exit 1
 
       - name: Verify Vaultwarden is running
         run: |
-          VW_IP=$(docker inspect backvault-e2e-vaultwarden --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://${VW_IP}:80/api/config" 2>/dev/null)
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null)
           if [ "$HTTP_CODE" != "200" ]; then
             echo "Error: Vaultwarden health check failed (HTTP $HTTP_CODE)"
             exit 1
           fi
+          echo "Vaultwarden health check passed"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -98,10 +101,6 @@ jobs:
         run: |
           npm install -g @bitwarden/cli
 
-      - name: Configure Bitwarden CLI
-        run: |
-          bw config server ${{ env.VAULTWARDEN_URL }}
-
       - name: Install dependencies
         run: |
           pip install uv
@@ -114,12 +113,6 @@ jobs:
           BW_TEST_PASSWORD: ${{ secrets.BW_TEST_PASSWORD }}
           BW_TEST_MASTER_PASSWORD: ${{ secrets.BW_TEST_MASTER_PASSWORD }}
         run: uv run pytest tests/test_e2e.py -v --timeout=300
-
-      - name: Cleanup Vaultwarden
-        if: always()
-        run: |
-          docker stop backvault-e2e-vaultwarden 2>/dev/null || true
-          docker rm backvault-e2e-vaultwarden 2>/dev/null || true
 
       - name: Cleanup Docker buildx
         if: always()

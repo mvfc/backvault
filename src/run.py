@@ -42,13 +42,10 @@ def main():
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
-    raw_value = org_export_mode_raw if org_export_mode_raw else "single"
-    org_export_mode = raw_value if raw_value in ("single", "multiple") else "single"
-    if raw_value != org_export_mode:
-        logger.warning(
-            f"Invalid org_export_mode '{raw_value}' (org_export_mode_raw={org_export_mode_raw!r}), "
-            f"defaulting to 'single'"
-        )
+    raw_value = org_export_mode_raw
+    org_export_mode = raw_value if raw_value in ("single", "multiple", "none") else None
+    if raw_value is not None and raw_value not in ("single", "multiple", "none"):
+        logger.warning(f"Invalid org_export_mode '{raw_value}', ignoring")
     configured_org_ids = (
         [org.strip() for org in org_ids_raw.split(",") if org.strip()]
         if org_ids_raw
@@ -121,7 +118,9 @@ def main():
                 org_ids = []
 
         # Validate org IDs to prevent path traversal in filenames
-        safe_org_ids = []
+        # Keep original org_ids for export calls, create separate map for safe filenames
+        safe_suffixes = {}
+        seen_suffixes = {}
         for org_id in org_ids:
             if org_id is None:
                 continue
@@ -130,8 +129,14 @@ def main():
                 logger.warning(
                     f"Org ID '{org_id}' contains unsafe characters, replaced with '{safe_id}'"
                 )
-            safe_org_ids.append(safe_id)
-        org_ids = safe_org_ids
+            # Handle collisions by appending counter
+            if safe_id in seen_suffixes:
+                counter = seen_suffixes[safe_id] + 1
+                seen_suffixes[safe_id] = counter
+                safe_id = f"{safe_id}_{counter}"
+            else:
+                seen_suffixes[safe_id] = 0
+            safe_suffixes[org_id] = safe_id
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -158,7 +163,14 @@ def main():
         logger.info(f"Personal vault export completed to {personal_file}.")
 
         # Export organizations
-        if org_export_mode == "single" and has_orgs:
+        # None means default to multiple (export all orgs)
+        if org_export_mode is None:
+            org_export_mode = "multiple"
+            logger.info("org_export_mode not configured, defaulting to 'multiple'")
+
+        if org_export_mode == "none":
+            logger.info("Organization exports disabled by user configuration")
+        elif org_export_mode == "single" and has_orgs:
             if encryption_mode == "raw":
                 all_org_data = {}
                 for org_id in org_ids:
@@ -192,8 +204,9 @@ def main():
 
         elif org_export_mode == "multiple" and has_orgs:
             for org_id in org_ids:
+                safe_suffix = safe_suffixes.get(org_id, org_id)
                 org_file = os.path.join(
-                    backup_dir, f"backup_{timestamp}_org-{org_id}.enc"
+                    backup_dir, f"backup_{timestamp}_org-{safe_suffix}.enc"
                 )
                 try:
                     if encryption_mode == "raw":

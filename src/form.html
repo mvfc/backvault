@@ -125,6 +125,7 @@
                 <label for="org_export_mode">Organization Export Mode</label>
                 <select id="org_export_mode" name="org_export_mode" aria-describedby="org-error">
                     <option value="multiple" selected>Separate files per organization</option>
+                    <option value="none">No organization exports (personal vault only)</option>
                     <option value="single" disabled>Single combined file (requires raw encryption)</option>
                 </select>
                 <p class="org-error" id="org-error">Single mode is not supported with Bitwarden encryption. Use "Separate files" or set BACKUP_ENCRYPTION_MODE=raw.</p>
@@ -135,7 +136,7 @@
                     var form=document.querySelector('form');
                     var showError=function(){error.hidden=select.value!=='single'};
                     form.addEventListener('submit',function(e){
-                        if(select.value==='single'){e.preventDefault();alert('Single mode requires BACKUP_ENCRYPTION_MODE=raw. Please use "Separate files per organization".');}
+                        if(select.value==='single'){e.preventDefault();alert('Single mode requires BACKUP_ENCRYPTION_MODE=raw. Please use "Separate files per organization" or "No organization exports".');}
                     });
                     select.addEventListener('change',showError);
                     showError();

@@ -5,22 +5,29 @@ These tests require:
 - Vaultwarden running (see fixtures)
 - Test user credentials configured via environment variables
 
+Marked with @pytest.mark.e2e - excluded from default pytest run.
+
 Run with:
-    VAULTWARDEN_URL=http://localhost:8080 \
+    VAULTWARDEN_URL=http://localhost:8888 \
     BW_TEST_EMAIL=test@example.com \
     BW_TEST_PASSWORD=testpassword123 \
     BW_TEST_MASTER_PASSWORD=masterpassword123 \
-    uv run pytest tests/test_e2e.py -v
+    uv run pytest tests/test_e2e.py -v -m e2e
 """
 
 import json
 import os
 import subprocess
 import time
+from urllib.parse import urlparse
 
 import pytest
 
-VAULTWARDEN_URL = os.getenv("VAULTWARDEN_URL", "http://localhost:8080")
+pytestmark = pytest.mark.e2e
+
+VAULTWARDEN_URL = os.getenv("VAULTWARDEN_URL", "http://localhost:8888")
+VAULTWARDEN_PORT = str(urlparse(VAULTWARDEN_URL).port or 80)
+IMAGE_NAME = os.getenv("IMAGE_NAME", "backvault:latest")
 TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
 TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", "Master123!")
@@ -50,14 +57,14 @@ def vaultwarden_container():
         return
 
     result = subprocess.run(
-        ["docker", "ps", "--filter", "publish=8080", "--format", "{{.Names}}"],
+        ["docker", "ps", "--filter", f"publish={VAULTWARDEN_PORT}", "--format", "{{.Names}}"],
         capture_output=True,
         text=True,
     )
     if result.stdout.strip():
         container_names = result.stdout.strip().splitlines()
         container_name = container_names[0] if container_names else ""
-        print(f"Using existing container on port 8080: {container_name}")
+        print(f"Using existing container on port {VAULTWARDEN_PORT}: {container_name}")
         yield container_name
         return
 
@@ -70,7 +77,7 @@ def vaultwarden_container():
             "--name",
             container_name,
             "-p",
-            "8080:80",
+            f"{VAULTWARDEN_PORT}:80",
             "-e",
             "SIGNUPS_ALLOWED=true",
             "-e",
@@ -286,17 +293,17 @@ class TestE2EDocker:
     def test_docker_image_has_required_binaries(self):
         """Verify Docker image has all required binaries."""
         result = subprocess.run(
-            ["docker", "image", "inspect", "backvault:latest"],
+            ["docker", "image", "inspect", IMAGE_NAME],
             capture_output=True,
         )
         if result.returncode != 0:
-            pytest.skip("Image not built yet: backvault:latest")
+            pytest.skip(f"Image not built yet: {IMAGE_NAME}")
 
         required_binaries = ["bw", "supercronic", "python3", "sqlcipher"]
 
         for binary in required_binaries:
             result = subprocess.run(
-                ["docker", "run", "--rm", "backvault:latest", "which", binary],
+                ["docker", "run", "--rm", IMAGE_NAME, "which", binary],
                 capture_output=True,
             )
             assert result.returncode == 0, f"Binary {binary} not found in image"
@@ -308,7 +315,7 @@ class TestE2EDocker:
                 "docker",
                 "run",
                 "--rm",
-                "backvault:latest",
+                IMAGE_NAME,
                 "ls",
                 "-la",
                 "/app/entrypoint.sh",
@@ -333,13 +340,14 @@ class TestE2EDocker:
 class TestE2EErrorHandling:
     """Test error handling with real Vaultwarden."""
 
-    def test_invalid_session_handling(self, bw_env):
+    def test_invalid_session_handling(self, bw_session):
         """Test that invalid session is handled gracefully."""
+        invalid_env = {**bw_session["bw_env"], "BW_SESSION": "invalid_session_key"}
         result = subprocess.run(
             ["bw", "status"],
             capture_output=True,
             text=True,
-            env={**bw_env, "BW_SESSION": "invalid_session_key"},
+            env=invalid_env,
         )
 
         assert result.returncode != 0

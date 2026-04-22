@@ -13,3 +13,7 @@ trivy
 *bandit*
 .pre-commit*
 .secrets
+.coverage
+coverage.xml
+FLOW.md
+STATE.md

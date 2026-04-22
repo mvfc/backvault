@@ -9,12 +9,6 @@ on:
 jobs:
   opencode:
     if: >
-      (github.event.comment.body == '/oc' ||
-       github.event.comment.body == '/opencode' ||
-       startsWith(github.event.comment.body, '/oc ') ||
-       startsWith(github.event.comment.body, '/opencode ') ||
-       contains(github.event.comment.body, '\n/oc') ||
-       contains(github.event.comment.body, '\n/opencode')) &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER' ||
        github.event.comment.author_association == 'COLLABORATOR')
@@ -30,10 +24,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check for command
+        id: check-command
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.comment.body;
+            const isCommand = body === '/oc' ||
+              body === '/opencode' ||
+              body.startsWith('/oc ') ||
+              body.startsWith('/opencode ') ||
+              body.includes('\n/oc ') ||
+              body.includes('\n/opencode ');
+            core.setOutput('is_command', isCommand);
+
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libsqlcipher-dev libssl-dev
 
       - name: Run opencode
+        if: steps.check-command.outputs.is_command == 'true'
         uses: anomalyco/opencode/github@v1.14.19
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

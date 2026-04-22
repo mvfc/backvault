@@ -54,8 +54,8 @@ def init(
         return HTMLResponse("Database connection failed", status_code=500)
 
     # Validate org_export_mode against allowlist
-    if org_export_mode not in ("single", "multiple"):
-        org_export_mode = "single"
+    if org_export_mode not in ("single", "multiple", "none"):
+        org_export_mode = "multiple"
 
     # Store encrypted passwords and keys
     put_key(conn, "master_password", master_password.encode())
