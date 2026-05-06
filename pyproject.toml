@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cryptography>=46.0.3",
     "fastapi>=0.121.1",
-    "pip>=25.3",
+    "pip>=26.1",
     "pysqlite3>=0.5.4",
     "python-multipart>=0.0.26",
     "sqlcipher3>=0.5.4",
