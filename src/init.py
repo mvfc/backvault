@@ -71,12 +71,15 @@ def done() -> str:
         os.kill(os.getpid(), signal.SIGTERM)
 
     Thread(target=_shutdown).start()
-    return """
+    return f"""
     <html>
-    <body style="background:#111; color:#eee; display:flex; justify-content:center; align-items:center; height:100vh; font-family:Segoe UI, sans-serif;">
-      <div style="text-align:center;">
+    <body style="background:#111; color:#eee; display:flex; justify-content:center; align-items:center; min-height:100vh; font-family:Segoe UI, sans-serif; margin:0;">
+      <div style="max-width:520px; padding:32px; text-align:left; line-height:1.5;">
         <h3>Setup complete.</h3>
-        <p>The UI will now stop and the container will enter normal mode. You can close this window.</p>
+        <p>Your credentials were saved and BackVault is switching into normal backup mode.</p>
+        <p>This setup UI only runs for the first configuration. After this page closes, use the container logs to confirm backup activity.</p>
+        <p>Backups will be written under <code>{DATA_DIR}</code> unless you configured another data directory.</p>
+        <p>You can close this window.</p>
       </div>
     </body>
     </html>
