@@ -2,6 +2,7 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from src.db import db_connect, put_key
 from src.utils import validate_path
+from html import escape
 import logging
 from sys import stdout
 from threading import Thread
@@ -71,6 +72,7 @@ def done() -> str:
         os.kill(os.getpid(), signal.SIGTERM)
 
     Thread(target=_shutdown).start()
+    escaped_data_dir = escape(DATA_DIR)
     return f"""
     <html>
     <body style="background:#111; color:#eee; display:flex; justify-content:center; align-items:center; min-height:100vh; font-family:Segoe UI, sans-serif; margin:0;">
@@ -78,7 +80,7 @@ def done() -> str:
         <h3>Setup complete.</h3>
         <p>Your credentials were saved and BackVault is switching into normal backup mode.</p>
         <p>This setup UI only runs for the first configuration. After this page closes, use the container logs to confirm backup activity.</p>
-        <p>Backups will be written under <code>{DATA_DIR}</code> unless you configured another data directory.</p>
+        <p>Backups will be written under <code>{escaped_data_dir}</code> unless you configured another data directory.</p>
         <p>You can close this window.</p>
       </div>
     </body>
