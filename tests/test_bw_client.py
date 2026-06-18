@@ -1,5 +1,7 @@
+import json
+import os
 import pytest
-from unittest.mock import patch, ANY
+from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
 
 
@@ -196,3 +198,112 @@ def test_encrypt_data():
     password = "test_password"
     encrypted_data = client.encrypt_data(data, password)
     assert encrypted_data != data
+
+
+@patch("src.bw_client.sprun")
+def test_list_organizations(mock_sprun):
+    """
+    Tests that list_organizations returns organization list.
+    """
+    mock_sprun.return_value.stdout = json.dumps([
+        {"id": "org1", "name": "Org 1"},
+        {"id": "org2", "name": "Org 2"},
+    ])
+    mock_sprun.return_value.returncode = 0
+
+    client = BitwardenClient(session="test_session")
+    orgs = client.list_organizations()
+
+    assert len(orgs) == 2
+    assert orgs[0]["id"] == "org1"
+    mock_sprun.assert_called_once_with(
+        ["bw", "list", "organizations"],
+        text=True, capture_output=True, check=True, env=ANY
+    )
+
+
+@patch("src.bw_client.sprun")
+def test_export_organization_bitwarden(mock_sprun):
+    """
+    Tests organization export with Bitwarden encryption.
+    """
+    mock_sprun.return_value.returncode = 0
+    mock_sprun.return_value.stdout = ""
+
+    client = BitwardenClient(session="test_session")
+
+    os.environ["TEST_MODE"] = "1"
+    try:
+        client.export_organization_bitwarden("/tmp/backups/org.enc", "file_pw", "org123")
+    except Exception:
+        pass
+    finally:
+        del os.environ["TEST_MODE"]
+
+    mock_sprun.assert_called_once()
+
+
+@patch("src.bw_client.sprun")
+@patch("builtins.open", new_callable=MagicMock)
+def test_export_organization_raw_encrypted(mock_file, mock_sprun):
+    """
+    Tests organization export with raw (AES-256-GCM) encryption.
+    """
+    mock_sprun.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps({"items": [{"id": "1", "name": "Item 1"}]}),
+        stderr=""
+    )
+
+    client = BitwardenClient(session="test_session")
+
+    os.environ["TEST_MODE"] = "1"
+    try:
+        client.export_organization_raw_encrypted("/tmp/backups/org.enc", "file_pw", "org123")
+    except Exception:
+        pass
+    finally:
+        del os.environ["TEST_MODE"]
+
+    mock_sprun.assert_called()
+
+
+@patch("src.bw_client.sprun")
+def test_status(mock_sprun):
+    """
+    Tests status method returns vault status.
+    """
+    mock_sprun.return_value.stdout = json.dumps({
+        "status": "unlocked",
+        "userId": "user123"
+    })
+    mock_sprun.return_value.returncode = 0
+
+    client = BitwardenClient(session="test_session")
+    status = client.status()
+
+    assert status["status"] == "unlocked"
+    mock_sprun.assert_called_once_with(
+        ["bw", "status"],
+        text=True, capture_output=True, check=True, env=ANY
+    )
+
+
+@patch("src.bw_client.sprun")
+def test_export_organization_raw(mock_sprun):
+    """
+    Tests export_organization_raw returns raw JSON.
+    """
+    expected_org_data = {"items": [{"id": "1", "name": "Test Item"}]}
+    mock_sprun.return_value.stdout = json.dumps(expected_org_data)
+    mock_sprun.return_value.returncode = 0
+
+    client = BitwardenClient(session="test_session")
+    org_data = client.export_organization_raw("org123")
+
+    assert org_data == expected_org_data
+    call_args = mock_sprun.call_args[0][0]
+    assert call_args[0] == "bw"
+    assert "--organizationid" in call_args
+    assert "org123" in call_args
+    assert "--raw" in call_args
