@@ -13,7 +13,7 @@ RUN apk update && apk add --no-cache \
     bash \
     unzip \
     sqlcipher \
-    libressl-dev \
+    openssl-dev \
     sqlite-dev \
     sqlcipher-dev \
     build-base \
@@ -74,7 +74,7 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh /app/run.sh
 RUN pip install --upgrade pip --no-cache-dir && \
     pip install --no-input --no-cache-dir -r requirements.txt
 
-RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev --no-cache && \
+RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev openssl-dev --no-cache && \
     rm -rf /var/lib/apk/*
 
 ENV PYTHONPATH=/app
