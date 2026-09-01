@@ -186,7 +186,8 @@ class BitwardenClient:
                 )
             except Exception as inner_e:
                 logger.error(
-                    f"Failed to log out after error. Failure: {_safe_error(inner_e)}"
+                    f"Failed to log out after error. Failure: "
+                    f"{self._redact_text(_safe_error(inner_e), env)}"
                 )
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 

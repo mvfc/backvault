@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from unittest.mock import patch, ANY
 from src.bw_client import BitwardenClient, BitwardenError
@@ -143,6 +145,31 @@ def test_redact_text_overlapping_secrets_longer_redacted_first(mock_sprun):
     assert "supersecret" not in result
     assert "123" not in result
     assert "[REDACTED]" in result
+
+
+@patch("src.bw_client.sprun")
+def test_logout_cleanup_error_redacts_secrets(mock_sprun, caplog):
+    """
+    Tests that a failed cleanup logout after a command failure does not
+    leak secrets into the logged error (regression).
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "unlock", "--raw"], stderr="wrong password"),
+        CalledProcessError(
+            1,
+            ["bw", "logout"],
+            stderr="unable to reach server for user supersecret",
+        ),
+    ]
+    client = BitwardenClient(
+        client_secret="supersecret", client_id=None, session=None
+    )
+    with caplog.at_level(logging.ERROR, logger="src.bw_client"):
+        with pytest.raises(BitwardenError):
+            client._run(["unlock", "--raw"])
+    assert any("supersecret" in r.message for r in caplog.records) is False
 
 
 @patch("src.bw_client.sprun")
