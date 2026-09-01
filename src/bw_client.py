@@ -1,4 +1,5 @@
 import os
+import time
 from subprocess import CalledProcessError, run as sprun
 import json
 import logging
@@ -49,6 +50,8 @@ class BitwardenClient:
         client_id: str | None = None,
         client_secret: str | None = None,
         use_api_key: bool = True,
+        login_retries: int = 5,
+        login_retry_delay: float = 2.0,
     ):
         """
         Initialize Bitwarden client wrapper.
@@ -59,11 +62,15 @@ class BitwardenClient:
         :param client_id: Client ID for API key login (optional)
         :param client_secret: Client Secret for API key login (optional)
         :param use_api_key: Whether to use API key login if client_id and client_secret are provided (Default to True)
+        :param login_retries: Number of times to retry login on transient failure (e.g. server starting up)
+        :param login_retry_delay: Seconds to wait between login retries
         """
         self.bw_cmd = bw_cmd
         self.session = session
         self.client_id = client_id
         self.client_secret = client_secret
+        self.login_retries = login_retries
+        self.login_retry_delay = login_retry_delay
         self.use_api_key = (
             use_api_key and client_id is not None and client_secret is not None
         )
@@ -210,7 +217,10 @@ class BitwardenClient:
     # Core API methods
     # -------------------------------
     def logout(self) -> None:
-        """Logout and clear session"""
+        """Logout and clear session. No-op if no session is active."""
+        if self.session is None:
+            logger.info("No active session; skipping logout")
+            return
         self._run(["logout"], capture_json=False)
         self.session = None
         logger.info("Logged out successfully")
@@ -236,15 +246,28 @@ class BitwardenClient:
 
             cmd = ["login", "--apikey"]
 
-            # Run CLI
-            result = self._run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-                env=env,
-                capture_json=False,
-            )
+            # Retry so transient failures (e.g. the server still starting up
+            # after a host reboot) do not abort the whole run.
+            attempts = self.login_retries + 1
+            for attempt in range(1, attempts + 1):
+                try:
+                    result = self._run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        env=env,
+                        capture_json=False,
+                    )
+                    break
+                except BitwardenError:
+                    if attempt >= attempts:
+                        raise
+                    logger.warning(
+                        f"Login attempt {attempt}/{attempts} failed; retrying "
+                        f"in {self.login_retry_delay}s"
+                    )
+                    time.sleep(self.login_retry_delay)
             self.session = result
             logger.info("Logged in successfully")
 
