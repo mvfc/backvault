@@ -129,6 +129,23 @@ def test_login_error_message_does_not_contain_password(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
+def test_redact_text_overlapping_secrets_longer_redacted_first(mock_sprun):
+    """
+    Tests that when one secret is a prefix/substring of another, the
+    longer secret is fully redacted without leaving a suffix.
+    """
+    client = BitwardenClient(
+        client_secret="supersecret123", client_id=None, session=None
+    )
+    env = {"BW_PASSWORD": "supersecret", "BW_SESSION": "sess"}
+    text = "Command 'bw unlock' stderr: supersecret supersecret123 sess"
+    result = client._redact_text(text, env)
+    assert "supersecret" not in result
+    assert "123" not in result
+    assert "[REDACTED]" in result
+
+
+@patch("src.bw_client.sprun")
 def test_logout(mock_sprun):
     """
     Tests that the logout method works correctly.

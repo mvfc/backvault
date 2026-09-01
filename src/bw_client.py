@@ -114,8 +114,10 @@ class BitwardenClient:
                 if env.get(key):
                     secrets.add(env[key])
         redacted = text
-        for secret in secrets:
-            if secret and secret in redacted:
+        for secret in sorted(
+            (s for s in secrets if s), key=len, reverse=True
+        ):
+            if secret in redacted:
                 redacted = redacted.replace(secret, "[REDACTED]")
         return redacted
 
