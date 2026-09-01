@@ -2,7 +2,6 @@ import os
 from subprocess import CalledProcessError, run as sprun
 import json
 import logging
-import re
 from typing import Any
 from sys import stdout
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -23,8 +22,22 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-password_regex = re.compile(r"('--password',\s*)('[^']*')(\s*]')", re.IGNORECASE)
-unlock_regex = re.compile(r"('unlock',\s*)('[^']*\s*-)", re.IGNORECASE)
+
+def _safe_error(e: Exception) -> str:
+    """
+    Build a safe error message from an exception without interpolating
+    its string representation wholesale. CalledProcessError.__str__()
+    includes the full argv, which can leak secrets passed as arguments.
+    """
+    if isinstance(e, CalledProcessError):
+        from shlex import quote
+
+        cmd = " ".join(quote(str(a)) for a in e.cmd) if e.cmd else "(unknown)"
+        msg = f"Command '{cmd}' returned non-zero exit status {e.returncode}."
+        if e.stderr:
+            msg += f" stderr: {e.stderr.strip()}"
+        return msg
+    return str(e)
 
 
 class BitwardenClient:
@@ -86,6 +99,28 @@ class BitwardenClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.logout()
 
+    def _redact_text(self, text: str, env: dict | None = None) -> str:
+        """
+        Redact all known secret values from an arbitrary string.
+        Used as a defense-in-depth redaction layer for any outgoing
+        message, regardless of where the secret originated.
+        """
+        secrets = set()
+        for value in (self.session, self.client_id, self.client_secret):
+            if value:
+                secrets.add(value)
+        if env:
+            for key in ("BW_PASSWORD", "BW_CLIENTSECRET", "BW_CLIENTID", "BW_SESSION"):
+                if env.get(key):
+                    secrets.add(env[key])
+        redacted = text
+        for secret in sorted(
+            (s for s in secrets if s), key=len, reverse=True
+        ):
+            if secret in redacted:
+                redacted = redacted.replace(secret, "[REDACTED]")
+        return redacted
+
     def _run(
         self,
         cmd: list[str],
@@ -134,8 +169,12 @@ class BitwardenClient:
                 env=env,
             )
         except Exception as e:
-            masked_e = password_regex.sub("('--password', '****')]", e.__str__())
-            masked_e = unlock_regex.sub("('unlock', '****', '-)", masked_e)
+            returncode = e.returncode if isinstance(e, CalledProcessError) else None
+            masked_e = f"Command '{self.bw_cmd} {' '.join(_redact_cmd(cmd))}'"
+            if returncode is not None:
+                masked_e += f" returned non-zero exit status {returncode}."
+            if isinstance(e, CalledProcessError) and e.stderr:
+                masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
             logger.error(f"Failed to run command: {masked_e}")
             try:
                 sprun(
@@ -146,43 +185,23 @@ class BitwardenClient:
                     env=env,
                 )
             except Exception as inner_e:
-                masked_inner_e = password_regex.sub(
-                    "('--password', '****')]", inner_e.__str__()
-                )
-                masked_inner_e = unlock_regex.sub(
-                    "'unlock', '**** --raw'", masked_inner_e
-                )
                 logger.error(
-                    f"Failed to log out after error. Failure: {masked_inner_e}"
+                    f"Failed to log out after error. Failure: "
+                    f"{self._redact_text(_safe_error(inner_e), env)}"
                 )
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
-            logger.error(
-                f"Bitwarden CLI error: {
-                    unlock_regex.sub(
-                        password_regex.sub(
-                            "('--password', '****')]", result.stderr.strip()
-                        ),
-                        "'unlock', '**** --raw'",
-                    )
-                }"
-            )
-            raise BitwardenError(
-                unlock_regex.sub(
-                    password_regex.sub(
-                        "('--password', '****')]", result.stderr.strip()
-                    ),
-                    "'unlock', '**** --raw'",
-                )
-            )
+            masked_stderr = self._redact_text(result.stderr.strip(), env)
+            logger.error(f"Bitwarden CLI error: {masked_stderr}")
+            raise BitwardenError(masked_stderr)
 
         output = result.stdout.strip()
         if capture_json:
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse JSON output: {output}")
+                logger.error("Failed to parse JSON output")
                 raise BitwardenError("Failed to parse JSON output")
         else:
             return output
@@ -231,12 +250,16 @@ class BitwardenClient:
 
         else:
             logger.info("Logging in via email/password")
+            env = os.environ.copy()
             cmd = ["login", email]
             if password:
-                cmd += ["--password", password]
+                env["BW_PASSWORD"] = password
+                cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(cmd, capture_json=False)
+            self.session = self._run(
+                cmd, capture_json=False, env=env
+            )
             logger.info("Logged in successfully")
 
         return self.session
@@ -248,8 +271,9 @@ class BitwardenClient:
         """
         env = os.environ.copy()
         env["BW_SESSION"] = self.session
+        env["BW_PASSWORD"] = password
 
-        cmd = ["unlock", password, "--raw"]
+        cmd = ["unlock", "--passwordenv", "BW_PASSWORD", "--raw"]
         result = self._run(
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
