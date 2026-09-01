@@ -17,3 +17,4 @@ trivy
 coverage.xml
 FLOW.md
 STATE.md
+bin/act

@@ -1,4 +1,5 @@
 import json
+import logging
 import pytest
 from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
@@ -88,6 +89,8 @@ def test_login_with_api_key(mock_sprun):
 def test_login_with_email_and_password(mock_sprun):
     """
     Tests that the login method works correctly with an email and password.
+    The password must be passed via the BW_PASSWORD env var, never as a
+    positional argument (which would leak it into logs and ps).
     """
     mock_sprun.return_value.stdout = "test_session_key"
     mock_sprun.return_value.stderr = ""
@@ -97,12 +100,74 @@ def test_login_with_email_and_password(mock_sprun):
     assert session_key == "test_session_key"
     assert client.session == "test_session_key"
     mock_sprun.assert_called_once_with(
-        ["bw", "login", "test_email", "--password", "test_password", "--raw"],
+        ["bw", "login", "test_email", "--passwordenv", "BW_PASSWORD", "--raw"],
         text=True,
         capture_output=True,
         check=True,
         env=ANY,
     )
+    call = mock_sprun.call_args
+    assert call.kwargs["env"]["BW_PASSWORD"] == "test_password"
+
+
+@patch("src.bw_client.sprun")
+def test_login_error_message_does_not_contain_password(mock_sprun):
+    """
+    Tests that when login fails, the returned error message does not
+    contain the master password anywhere (regression test for the
+    CalledProcessError argv leak).
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = CalledProcessError(
+        1,
+        ["bw", "login", "test_email", "test_password", "--raw"],
+        stderr="Authentication failed",
+    )
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError) as excinfo:
+        client.login(email="test_email", password="test_password")
+    assert "test_password" not in str(excinfo.value)
+
+
+@patch("src.bw_client.sprun")
+def test_redact_text_overlapping_secrets_longer_redacted_first(mock_sprun):
+    """
+    Tests that when one secret is a prefix/substring of another, the
+    longer secret is fully redacted without leaving a suffix.
+    """
+    client = BitwardenClient(
+        client_secret="supersecret123", client_id=None, session=None
+    )
+    env = {"BW_PASSWORD": "supersecret", "BW_SESSION": "sess"}
+    text = "Command 'bw unlock' stderr: supersecret supersecret123 sess"
+    result = client._redact_text(text, env)
+    assert "supersecret" not in result
+    assert "123" not in result
+    assert "[REDACTED]" in result
+
+
+@patch("src.bw_client.sprun")
+def test_logout_cleanup_error_redacts_secrets(mock_sprun, caplog):
+    """
+    Tests that a failed cleanup logout after a command failure does not
+    leak secrets into the logged error (regression).
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "unlock", "--raw"], stderr="wrong password"),
+        CalledProcessError(
+            1,
+            ["bw", "logout"],
+            stderr="unable to reach server for user supersecret",
+        ),
+    ]
+    client = BitwardenClient(client_secret="supersecret", client_id=None, session=None)
+    with caplog.at_level(logging.ERROR, logger="src.bw_client"):
+        with pytest.raises(BitwardenError):
+            client._run(["unlock", "--raw"])
+    assert any("supersecret" in r.message for r in caplog.records) is False
 
 
 @patch("src.bw_client.sprun")
@@ -119,6 +184,50 @@ def test_logout(mock_sprun):
     mock_sprun.assert_called_once_with(
         ["bw", "logout"], text=True, capture_output=True, check=True, env=ANY
     )
+
+
+@patch("src.bw_client.sprun")
+def test_logout_without_session_is_noop(mock_sprun):
+    """
+    Tests that calling logout when no session exists does not attempt to run
+    `bw logout` and therefore does not raise (regression for the restart loop
+    where login failed and the finally block still invoked logout).
+    """
+    client = BitwardenClient()
+    client.logout()
+    assert client.session is None
+    mock_sprun.assert_not_called()
+
+
+@patch("src.bw_client.sprun")
+def test_login_with_api_key_retries_on_transient_failure(mock_sprun):
+    """
+    Tests that login retries a transient command failure (e.g. the Bitwarden
+    server still starting up after a host reboot) and eventually succeeds.
+    """
+    from subprocess import CalledProcessError
+
+    successful = MagicMock()
+    successful.returncode = 0
+    successful.stdout = "test_session_key"
+    successful.stderr = ""
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "login", "--apikey"]),
+        CalledProcessError(1, ["bw", "login", "--apikey"]),
+        successful,
+    ]
+    client = BitwardenClient(
+        client_id="test_client_id",
+        client_secret="test_client_secret",
+        use_api_key=True,
+        login_retries=3,
+        login_retry_delay=0,
+    )
+    session_key = client.login()
+    assert session_key == "test_session_key"
+    assert client.session == "test_session_key"
+    assert mock_sprun.call_count == 3
 
 
 def test_bitwarden_client_use_api_key_logic():
@@ -186,6 +295,67 @@ def test_run_method_error_handling(mock_sprun):
     client = BitwardenClient()
     with pytest.raises(BitwardenError):
         client._run(["status"])
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_error_does_not_log_raw_output(mock_sprun, caplog):
+    """
+    Tests that a JSON parse failure does not log the raw command output
+    (which may contain sensitive vault data).
+    """
+    mock_sprun.return_value.stdout = "not-json-sensitive-data-abc123"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with caplog.at_level(logging.ERROR, logger="src.bw_client"):
+        with pytest.raises(BitwardenError):
+            client._run(["export"], capture_json=True)
+    assert all(
+        "not-json-sensitive-data-abc123" not in r.message for r in caplog.records
+    )
+
+
+@patch("src.bw_client.sprun")
+def test_unlock_uses_passwordenv_not_positional_arg(mock_sprun):
+    """
+    Tests that the unlock method passes the master password via the
+    BW_PASSWORD environment variable, never as a positional argument
+    (which would leak it into logs and the process table via ps).
+    """
+    mock_sprun.return_value.stdout = "test_session_key"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient(session="existing_session")
+    session_key = client.unlock("supersecretmasterpw")
+    assert session_key == "test_session_key"
+    assert client.session == "test_session_key"
+    mock_sprun.assert_called_once()
+    call = mock_sprun.call_args
+    args = call.args[0]
+    assert "supersecretmasterpw" not in args
+    assert args == ["bw", "unlock", "--passwordenv", "BW_PASSWORD", "--raw"]
+    assert call.kwargs["env"]["BW_PASSWORD"] == "supersecretmasterpw"
+    assert call.kwargs["env"]["BW_SESSION"] == "existing_session"
+
+
+@patch("src.bw_client.sprun")
+def test_unlock_error_message_does_not_contain_password(mock_sprun):
+    """
+    Tests that when unlock fails, the returned error message does not
+    contain the master password anywhere (regression test for the
+    CalledProcessError argv leak).
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = CalledProcessError(
+        1,
+        ["bw", "unlock", "supersecretmasterpw", "--raw"],
+        stderr="Authentication failed",
+    )
+    client = BitwardenClient(session="existing_session")
+    with pytest.raises(BitwardenError) as excinfo:
+        client.unlock("supersecretmasterpw")
+    assert "supersecretmasterpw" not in str(excinfo.value)
 
 
 def test_encrypt_data():

@@ -1,5 +1,6 @@
+from html import escape
 from fastapi.testclient import TestClient
-from src.init import app, DB_PATH, PRAGMA_KEY_FILE
+from src.init import app, DATA_DIR, DB_PATH, PRAGMA_KEY_FILE
 from unittest.mock import patch, MagicMock
 
 client = TestClient(app)
@@ -81,5 +82,9 @@ def test_done_endpoint(mock_sleep, mock_kill):
     response = client.get("/done")
     assert response.status_code == 200
     assert "<h3>Setup complete.</h3>" in response.text
+    assert "switching into normal backup mode" in response.text
+    assert "only runs for the first configuration" in response.text
+    assert "Backups will be written under" in response.text
+    assert f"<code>{escape(DATA_DIR)}</code>" in response.text
     mock_sleep.assert_called_once_with(2)
     mock_kill.assert_called_once()
