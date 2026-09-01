@@ -11,3 +11,4 @@ db/
 trivy
 *bandit*
 .pre-commit*
+bin/act
