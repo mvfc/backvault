@@ -121,9 +121,7 @@ class BitwardenClient:
                 if env.get(key):
                     secrets.add(env[key])
         redacted = text
-        for secret in sorted(
-            (s for s in secrets if s), key=len, reverse=True
-        ):
+        for secret in sorted((s for s in secrets if s), key=len, reverse=True):
             if secret in redacted:
                 redacted = redacted.replace(secret, "[REDACTED]")
         return redacted
@@ -280,9 +278,7 @@ class BitwardenClient:
                 cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(
-                cmd, capture_json=False, env=env
-            )
+            self.session = self._run(cmd, capture_json=False, env=env)
             logger.info("Logged in successfully")
 
         return self.session
