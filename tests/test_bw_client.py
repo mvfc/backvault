@@ -1,7 +1,7 @@
 import logging
 
 import pytest
-from unittest.mock import patch, ANY
+from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
 
 
@@ -186,6 +186,50 @@ def test_logout(mock_sprun):
     mock_sprun.assert_called_once_with(
         ["bw", "logout"], text=True, capture_output=True, check=True, env=ANY
     )
+
+
+@patch("src.bw_client.sprun")
+def test_logout_without_session_is_noop(mock_sprun):
+    """
+    Tests that calling logout when no session exists does not attempt to run
+    `bw logout` and therefore does not raise (regression for the restart loop
+    where login failed and the finally block still invoked logout).
+    """
+    client = BitwardenClient()
+    client.logout()
+    assert client.session is None
+    mock_sprun.assert_not_called()
+
+
+@patch("src.bw_client.sprun")
+def test_login_with_api_key_retries_on_transient_failure(mock_sprun):
+    """
+    Tests that login retries a transient command failure (e.g. the Bitwarden
+    server still starting up after a host reboot) and eventually succeeds.
+    """
+    from subprocess import CalledProcessError
+
+    successful = MagicMock()
+    successful.returncode = 0
+    successful.stdout = "test_session_key"
+    successful.stderr = ""
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "login", "--apikey"]),
+        CalledProcessError(1, ["bw", "login", "--apikey"]),
+        successful,
+    ]
+    client = BitwardenClient(
+        client_id="test_client_id",
+        client_secret="test_client_secret",
+        use_api_key=True,
+        login_retries=3,
+        login_retry_delay=0,
+    )
+    session_key = client.login()
+    assert session_key == "test_session_key"
+    assert client.session == "test_session_key"
+    assert mock_sprun.call_count == 3
 
 
 def test_bitwarden_client_use_api_key_logic():
