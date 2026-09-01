@@ -256,6 +256,24 @@ def test_run_method_error_handling(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
+def test_run_method_json_parse_error_does_not_log_raw_output(mock_sprun, caplog):
+    """
+    Tests that a JSON parse failure does not log the raw command output
+    (which may contain sensitive vault data).
+    """
+    mock_sprun.return_value.stdout = "not-json-sensitive-data-abc123"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with caplog.at_level(logging.ERROR, logger="src.bw_client"):
+        with pytest.raises(BitwardenError):
+            client._run(["export"], capture_json=True)
+    assert all(
+        "not-json-sensitive-data-abc123" not in r.message for r in caplog.records
+    )
+
+
+@patch("src.bw_client.sprun")
 def test_unlock_uses_passwordenv_not_positional_arg(mock_sprun):
     """
     Tests that the unlock method passes the master password via the

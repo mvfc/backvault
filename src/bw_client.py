@@ -201,7 +201,7 @@ class BitwardenClient:
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse JSON output: {output}")
+                logger.error("Failed to parse JSON output")
                 raise BitwardenError("Failed to parse JSON output")
         else:
             return output
