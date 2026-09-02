@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
+import unittest
 from src.run import main, require_env
 import os
 from subprocess import CompletedProcess
@@ -218,6 +219,178 @@ def test_main_unlock_fails(mock_bw_client, mock_get_key, mock_db_connect):
     main()
 
     mock_client_instance.export_bitwarden_encrypted.assert_not_called()
+    mock_client_instance.logout.assert_called_once()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.bw_client.sprun")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "BACKUP_DIR": "/tmp/backups",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_single_bitwarden_aborts_before_personal_export(
+    mock_bw_client, mock_sprun, mock_get_key, mock_db_connect
+):
+    """
+    Tests that main fails fast when org_export_mode='single' with
+    encryption_mode='bitwarden' and does not export the personal vault.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "org-1,org-2",  # organization_ids
+        "single",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+    mock_sprun.return_value = CompletedProcess(
+        args=[], returncode=0, stdout="", stderr=""
+    )
+
+    result = main()
+
+    assert result == 1
+    mock_client_instance.export_bitwarden_encrypted.assert_not_called()
+    mock_client_instance.export_raw_encrypted.assert_not_called()
+    mock_client_instance.logout.assert_called_once()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "BACKUP_ENCRYPTION_MODE": "raw",
+        "BACKUP_DIR": "/tmp/backups",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_single_raw_all_orgs_fail_returns_nonzero(
+    mock_bw_client, mock_get_key, mock_db_connect
+):
+    """
+    Tests that main returns a non-zero code when all single-mode org exports fail.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "org-1,org-2",  # organization_ids
+        "single",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+    mock_client_instance.export_organization_raw.side_effect = Exception("org failed")
+    mock_client_instance.encrypt_data = MagicMock()
+
+    result = main()
+
+    assert result == 1
+    assert mock_client_instance.export_organization_raw.call_count == 2
+    mock_client_instance.encrypt_data.assert_not_called()
+    mock_client_instance.logout.assert_called_once()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "BACKUP_ENCRYPTION_MODE": "raw",
+        "BACKUP_DIR": "/tmp/backups",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_multiple_partial_org_failure_returns_nonzero(
+    mock_bw_client, mock_get_key, mock_db_connect
+):
+    """
+    Tests that main returns a non-zero code when a multiple-mode org export fails,
+    so scheduled automation can detect an incomplete backup.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "org-1,org-2",  # organization_ids
+        "multiple",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+    mock_client_instance.export_organization_raw_encrypted.side_effect = [
+        None,
+        Exception("org failed"),
+    ]
+
+    result = main()
+
+    assert result == 1
+    mock_client_instance.export_organization_raw_encrypted.assert_any_call(
+        unittest.mock.ANY, "test_file_pw", "org-1"
+    )
+    mock_client_instance.logout.assert_called_once()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "BACKUP_ENCRYPTION_MODE": "raw",
+        "BACKUP_DIR": "/tmp/backups",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_multiple_all_orgs_succeed_returns_zero(
+    mock_bw_client, mock_get_key, mock_db_connect
+):
+    """
+    Tests that main returns zero when all multiple-mode org exports succeed.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "org-1,org-2",  # organization_ids
+        "multiple",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+
+    result = main()
+
+    assert result == 0
+    mock_client_instance.export_organization_raw_encrypted.assert_any_call(
+        unittest.mock.ANY, "test_file_pw", "org-1"
+    )
+    mock_client_instance.export_organization_raw_encrypted.assert_any_call(
+        unittest.mock.ANY, "test_file_pw", "org-2"
+    )
     mock_client_instance.logout.assert_called_once()
 
 

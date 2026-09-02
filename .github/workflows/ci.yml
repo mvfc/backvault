@@ -191,5 +191,6 @@ jobs:
             ghcr.io/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.DOCKER_HUB_IMAGE_NAME }}:latest
             ${{ env.DOCKER_HUB_IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.DOCKER_HUB_IMAGE_NAME }}:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
