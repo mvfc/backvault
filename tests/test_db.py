@@ -128,6 +128,7 @@ def test_put_key():
         ("test_name", "test_value"),
     )
 
+
 def test_get_key():
     """
     Tests that get_key retrieves a value by its name.
