@@ -16,6 +16,7 @@ It’s designed for hands-free, secure, and automated backups using the official
 * 💾 Password-protected backup files using AES encryption
 * 🧹 **Automated Cleanup**: Automatically deletes old backups based on a configurable retention period.
 * ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
+* 📎 **Attachment Backups**: Packs all item attachments into an AES-256 encrypted 7-zip archive, with encrypted file names.
 * 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden
 * 🐳 Runs fully containerized — no setup or local dependencies required
 
@@ -138,6 +139,7 @@ BackVault will automatically:
 | `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | `https://vault.example.com` |
 | `BACKUP_INTERVAL_HOURS`        | Alternative to cron expression (integer hours) | ❌        | `12`                        |
 | `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. | ❌ | `raw` |
+| `BACKUP_ATTACHMENTS`           | Set to `true` to also back up item attachments into an encrypted 7-zip archive. | ❌ | `true` |
 | `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
@@ -244,6 +246,27 @@ if __name__ == "__main__":
         print("Decryption failed: Invalid password or corrupted file.", file=sys.stderr)
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
+```
+
+### Attachments archive (`*_attachments.7z`)
+
+If `BACKUP_ATTACHMENTS` is enabled, attachments are stored in a separate AES-256 encrypted 7-zip archive, regardless of the encryption mode used for the JSON export. It uses the same password as the JSON backup, and file names are encrypted too, so the password is required even to list the contents.
+
+Extract it with any 7-Zip compatible tool:
+
+```bash
+# 7-Zip (7zz / 7z) – prompts for the password
+7z x backup_20250101_120000_attachments.7z
+
+# or with py7zr (pip install py7zr); prompts for the password
+python -m py7zr x backup_20250101_120000_attachments.7z ./attachments
+```
+
+The result contains one folder per vault item, named after the item id (matching the `id` field in the JSON export), with that item's attachments inside:
+
+```
+<item-id-1>/document.pdf
+<item-id-2>/photo.jpg
 ```
 
 ---

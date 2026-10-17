@@ -369,3 +369,113 @@ def test_encrypt_data():
     password = "test_password"
     encrypted_data = client.encrypt_data(data, password)
     assert encrypted_data != data
+
+
+@patch("src.bw_client.sprun")
+def test_download_and_archive_attachments(mock_sprun, tmp_path):
+    """
+    Tests that attachments are downloaded into per-item folders and packed
+    into a password-protected 7z archive.
+    """
+    import json
+    import py7zr
+    from subprocess import CompletedProcess
+
+    items = [
+        {"id": "item-1", "attachments": [{"id": "a1", "fileName": "x.txt"}]},
+        {"id": "item-2", "attachments": []},
+    ]
+
+    def fake_bw(cmd, **kwargs):
+        if cmd[1:3] == ["list", "items"]:
+            return CompletedProcess(cmd, 0, stdout=json.dumps(items), stderr="")
+        if cmd[1:3] == ["get", "attachment"]:
+            out = cmd[cmd.index("--output") + 1]
+            with open(out, "w") as f:
+                f.write("data")
+            return CompletedProcess(cmd, 0, stdout="", stderr="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    mock_sprun.side_effect = fake_bw
+    client = BitwardenClient(session="existing_session")
+
+    src = tmp_path / "src"
+    src.mkdir()
+    assert client.download_attachments(str(src)) == 1
+    assert (src / "item-1" / "x.txt").read_text() == "data"
+    assert not (src / "item-2").exists()
+
+    get_call = mock_sprun.call_args_list[1]
+    assert get_call.args[0] == [
+        "bw",
+        "get",
+        "attachment",
+        "a1",
+        "--itemid",
+        "item-1",
+        "--output",
+        str(src / "item-1" / "x.txt"),
+    ]
+    assert get_call.kwargs["env"]["BW_SESSION"] == "existing_session"
+
+    archive = tmp_path / "a.7z"
+    client.create_encrypted_archive(str(src), str(archive), "pw")
+    with py7zr.SevenZipFile(archive, "r", password="pw") as z:
+        names = z.getnames()
+        assert any(n.endswith("item-1/x.txt") for n in names)
+        # The temporary source directory itself must not be an archive entry
+        assert all(n == "item-1" or n.startswith("item-1/") for n in names)
+        # The archive must be extractable and the file contents must match
+        restored = tmp_path / "restored"
+        z.extractall(path=restored)
+        assert (restored / "item-1" / "x.txt").read_text() == "data"
+    # The archive contents cannot be listed without the password
+    with pytest.raises(Exception):
+        with py7zr.SevenZipFile(archive, "r") as z:
+            z.getnames()
+
+
+@patch("src.bw_client.sprun")
+def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
+    """
+    Tests that attachment ids select downloads and duplicate names get unique suffixes.
+    """
+    import json
+    from subprocess import CompletedProcess
+
+    attachments = [
+        {"id": "a1", "fileName": "x.txt"},
+        {"id": "a2", "fileName": "x_1.txt"},
+        {"id": "a3", "fileName": "x.txt"},
+        {"id": "a4", "fileName": "x.txt"},
+        {"id": "a5", "fileName": "notes"},
+        {"id": "a6", "fileName": "notes"},
+    ]
+    items = [
+        {"id": "item-1", "attachments": attachments},
+        {"id": "item-2", "attachments": [{"id": "a7", "fileName": "x.txt"}]},
+    ]
+    mock_sprun.side_effect = [
+        CompletedProcess(["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""),
+        *[CompletedProcess([], 0, stdout="", stderr="") for _ in range(7)],
+    ]
+    client = BitwardenClient(session="existing_session")
+
+    assert client.download_attachments(str(tmp_path)) == 7
+
+    commands = [call.args[0] for call in mock_sprun.call_args_list[1:]]
+    assert [cmd[3] for cmd in commands] == [
+        "a1", "a2", "a3", "a4", "a5", "a6", "a7"
+    ]
+    expected_paths = [
+        "item-1/x.txt",
+        "item-1/x_1.txt",
+        "item-1/x_2.txt",
+        "item-1/x_3.txt",
+        "item-1/notes",
+        "item-1/notes_1",
+        "item-2/x.txt",
+    ]
+    assert [cmd[-1] for cmd in commands] == [
+        str(tmp_path / path) for path in expected_paths
+    ]
