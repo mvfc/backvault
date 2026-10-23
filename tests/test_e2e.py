@@ -85,23 +85,26 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "kdfIterations": 600000,
     }
 
-    req = Request(
-        f"{server_url.rstrip('/')}/api/accounts/register",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    for endpoint in ("/identity/accounts/register", "/api/accounts/register"):
+        req = Request(
+            f"{server_url.rstrip('/')}{endpoint}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
 
-    try:
-        with urlopen(req, timeout=10):
+        try:
+            with urlopen(req, timeout=10):
+                break
+        except HTTPError as e:
+            if e.code in (400, 409):
+                break
+            elif e.code == 404:
+                continue
+            else:
+                raise
+        except Exception:
             pass
-    except HTTPError as e:
-        if e.code in (400, 409):
-            pass
-        else:
-            raise
-    except Exception:
-        pass
 
 
 @pytest.fixture(scope="module")
