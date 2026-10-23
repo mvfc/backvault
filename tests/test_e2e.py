@@ -17,6 +17,7 @@ Run with:
 
 import base64
 import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -71,7 +72,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     encryptor = cipher.encryptor()
     ct = encryptor.update(padded_sym_key) + encryptor.finalize()
 
-    hmac_val = hashlib.hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
+    hmac_val = hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
 
     enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
 
