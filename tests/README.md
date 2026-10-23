@@ -65,7 +65,7 @@ export BW_TEST_MASTER_PASSWORD=your-master-password
 ## Run E2E tests
 
 ```bash
-uv run pytest tests/test_e2e.py -v
+uv run pytest tests/test_e2e.py -v -m e2e
 ```
 
 ### Manual CLI Testing
