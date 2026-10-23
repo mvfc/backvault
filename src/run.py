@@ -8,6 +8,8 @@ from sys import stdout
 from src.db import db_connect, get_key
 from src.utils import validate_path
 import re
+import shutil
+import tempfile
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,6 +107,7 @@ def main():
 
         # Determine org IDs to export (use configured or fetch all)
         # Skip API call when org exports are disabled
+        org_discovery_failed = False
         if org_export_mode is None or org_export_mode == "none":
             org_ids = []
             logger.info("Organization exports disabled")
@@ -121,6 +124,7 @@ def main():
                     f"Failed to fetch organizations: {e}. No orgs will be exported."
                 )
                 org_ids = []
+                org_discovery_failed = True
 
         # Validate org IDs to prevent path traversal in filenames
         # Keep original org_ids for export calls, create separate map for safe filenames
@@ -189,6 +193,7 @@ def main():
                 "org_export_mode not configured, defaulting to 'none' for safe upgrade"
             )
 
+        org_export_failed = False
         if org_export_mode == "none":
             logger.info("Organization exports disabled by user configuration")
         elif org_export_mode == "single" and has_orgs:
@@ -216,6 +221,12 @@ def main():
                     with open(org_file, "wb") as f:
                         f.write(encrypted_data)
                     logger.info(f"Organization export completed to {org_file}.")
+                    if len(all_org_data) < len(org_ids):
+                        logger.error(
+                            f"Failed to export all organizations ({len(all_org_data)}/{len(org_ids)} succeeded). "
+                            f"Backup incomplete."
+                        )
+                        org_export_failed = True
 
         elif org_export_mode == "multiple" and has_orgs:
             failures = []
@@ -243,6 +254,53 @@ def main():
                     f"Backup incomplete."
                 )
                 return 1
+
+        if org_discovery_failed or org_export_failed:
+            return 1
+
+        if os.getenv("BACKUP_ATTACHMENTS", "").lower() in ("1", "true", "yes"):
+            archive_file = os.path.join(
+                backup_dir, f"backup_{timestamp}_attachments.7z"
+            )
+            tmp_dir = tempfile.mkdtemp(prefix="backvault_attachments_")
+            try:
+                count = source.download_attachments(tmp_dir)
+                if count:
+                    with tempfile.TemporaryDirectory(
+                        prefix="backvault_archive_"
+                    ) as archive_dir:
+                        tmp_archive = os.path.join(
+                            archive_dir, os.path.basename(archive_file)
+                        )
+                        source.create_encrypted_archive(tmp_dir, tmp_archive, file_pw)
+                        fd, staged_archive = tempfile.mkstemp(
+                            prefix=".backvault_archive_", suffix=".tmp", dir=backup_dir
+                        )
+                        try:
+                            os.close(fd)
+                            shutil.copy2(tmp_archive, staged_archive)
+                            os.replace(staged_archive, archive_file)
+                        finally:
+                            try:
+                                if os.path.exists(staged_archive):
+                                    os.remove(staged_archive)
+                            except OSError as e:
+                                logger.warning(
+                                    f"Failed to remove temporary archive: {e}"
+                                )
+                else:
+                    logger.info("No attachments found; skipping archive.")
+            except Exception as e:
+                logger.error(f"Attachment backup failed: {e}")
+                raise
+            finally:
+                try:
+                    shutil.rmtree(tmp_dir)
+                except OSError as e:
+                    logger.warning(
+                        f"Failed to remove temporary attachment directory: {e}"
+                    )
+
         return 0
     finally:
         source.logout()

@@ -15,13 +15,20 @@ Run with:
     uv run pytest tests/test_e2e.py -v -m e2e
 """
 
+import base64
+import hashlib
 import json
 import os
 import subprocess
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import pytest
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 pytestmark = pytest.mark.e2e
 
@@ -30,7 +37,70 @@ VAULTWARDEN_PORT = str(urlparse(VAULTWARDEN_URL).port or 80)
 IMAGE_NAME = os.getenv("IMAGE_NAME", "backvault:latest")
 TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
-TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", "Master123!")
+TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", TEST_PASSWORD)
+
+
+def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
+    """Register a user account in Vaultwarden if not already registered."""
+    email_clean = email.lower().strip()
+    email_bytes = email_clean.encode("utf-8")
+    password_bytes = password.encode("utf-8")
+
+    # KDF 0: PBKDF2 SHA256 with 600,000 iterations
+    master_key = hashlib.pbkdf2_hmac(
+        "sha256", password_bytes, email_bytes, 600000, dklen=32
+    )
+    mp_hash = hashlib.pbkdf2_hmac("sha256", master_key, password_bytes, 1, dklen=32)
+    master_password_hash = base64.b64encode(mp_hash).decode("utf-8")
+
+    # Stretched master key via HKDF
+    enc_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"enc").derive(
+        master_key
+    )
+    mac_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"mac").derive(
+        master_key
+    )
+
+    sym_key = os.urandom(64)
+    iv = os.urandom(16)
+
+    padder = padding.PKCS7(128).padder()
+    padded_sym_key = padder.update(sym_key) + padder.finalize()
+
+    cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv))
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded_sym_key) + encryptor.finalize()
+
+    hmac_val = hashlib.hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
+
+    enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
+
+    payload = {
+        "email": email_clean,
+        "masterPasswordHash": master_password_hash,
+        "masterPasswordHint": None,
+        "key": enc_sym_key,
+        "kdf": 0,
+        "kdfIterations": 600000,
+    }
+
+    req = Request(
+        f"{server_url.rstrip('/')}/api/accounts/register",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req, timeout=10):
+            pass
+    except HTTPError as e:
+        if e.code in (400, 409):
+            pass
+        else:
+            raise
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="module")
@@ -129,18 +199,12 @@ def bw_env(tmp_path_factory):
 
 @pytest.fixture(scope="function")
 def bw_session(vaultwarden_container, bw_env):
-    """Create Bitwarden CLI session by logging in.
-
-    Skips when a usable account cannot be provisioned. Creating a usable
-    account against a fresh Vaultwarden requires reproducing Bitwarden's
-    client-side key derivation, which is out of scope for these tests; a
-    pre-provisioned account (e.g. a Bitwarden server or an
-    already-initialized Vaultwarden) must be supplied via the BW_TEST_*
-    environment variables for these login-based tests to run.
-    """
+    """Create Bitwarden CLI session by logging in."""
     subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
 
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
+
+    ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
 
     result = subprocess.run(
         [
@@ -156,10 +220,7 @@ def bw_session(vaultwarden_container, bw_env):
     )
 
     if result.returncode != 0:
-        pytest.skip(
-            f"No usable test account; login in CI requires a provisioned "
-            f"Bitwarden server. Login failed: {result.stderr.strip()}"
-        )
+        pytest.skip(f"No usable test account; login failed: {result.stderr.strip()}")
 
     session = result.stdout.strip()
 
