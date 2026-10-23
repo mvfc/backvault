@@ -1,5 +1,7 @@
 import os
+import json
 import logging
+import sys
 from src.bw_client import BitwardenClient
 from datetime import datetime
 from sys import stdout
@@ -30,13 +32,26 @@ def main():
     PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
     db_conn, db_cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not db_conn or not db_cursor:
-        return
+        return 1
 
     # Vault access information
     client_id = get_key(db_conn, "client_id")
     client_secret = get_key(db_conn, "client_secret")
     master_pw = get_key(db_conn, "master_password")
     file_pw = get_key(db_conn, "file_password")
+
+    # Organization configuration
+    org_ids_raw = get_key(db_conn, "organization_ids")
+    org_export_mode_raw = get_key(db_conn, "org_export_mode")
+    raw_value = org_export_mode_raw
+    org_export_mode = raw_value if raw_value in ("single", "multiple", "none") else None
+    if raw_value is not None and raw_value not in ("single", "multiple", "none"):
+        logger.warning(f"Invalid org_export_mode '{raw_value}', ignoring")
+    configured_org_ids = (
+        [org.strip() for org in org_ids_raw.split(",") if org.strip()]
+        if org_ids_raw
+        else []
+    )
 
     server = require_env("BW_SERVER")
     if (
@@ -47,7 +62,7 @@ def main():
         is None
     ):
         logger.error(f"Invalid BW_SERVER URL: '{server}'")
-        return
+        return 1
 
     # Configuration
     backup_dir = "/app/backups" if os.getenv("TEST_MODE") is None else "/tmp"  # nosec
@@ -59,7 +74,7 @@ def main():
         logger.error(
             f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'."
         )
-        return
+        return 1
 
     if log_file:
         logger.addHandler(logging.FileHandler(log_file))
@@ -80,35 +95,159 @@ def main():
             source.login()
         except Exception as e:
             logger.error(f"Login failed: {e}")
-            return
+            return 1
 
         try:
             source.unlock(master_pw)
         except Exception as e:
             logger.error(f"Unlock failed: {e}")
-            return
+            return 1
+
+        # Determine org IDs to export (use configured or fetch all)
+        # Skip API call when org exports are disabled
+        if org_export_mode is None or org_export_mode == "none":
+            org_ids = []
+            logger.info("Organization exports disabled")
+        elif configured_org_ids:
+            org_ids = configured_org_ids
+            logger.info(f"Exporting configured organizations: {org_ids}")
+        else:
+            try:
+                all_orgs = source.list_organizations()
+                org_ids = [org.get("id") for org in all_orgs if org.get("id")]
+                logger.info(f"Exporting all accessible organizations: {org_ids}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch organizations: {e}. No orgs will be exported."
+                )
+                org_ids = []
+
+        # Validate org IDs to prevent path traversal in filenames
+        # Keep original org_ids for export calls, create separate map for safe filenames
+        safe_suffixes = {}
+        seen_suffixes = set()
+        for org_id in org_ids:
+            if org_id is None:
+                continue
+            safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", org_id)
+            if safe_id != org_id:
+                logger.warning(
+                    f"Org ID '{org_id}' contains unsafe characters, replaced with '{safe_id}'"
+                )
+            # Handle collisions by appending counter until unique
+            candidate = safe_id
+            counter = 0
+            while candidate in seen_suffixes:
+                counter += 1
+                candidate = f"{safe_id}_{counter}"
+                logger.warning(
+                    f"Collision detected for '{safe_id}', using '{candidate}'"
+                )
+            seen_suffixes.add(candidate)
+            safe_suffixes[org_id] = candidate
 
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")
+        has_orgs = len(org_ids) > 0 and org_export_mode not in (None, "none")
+
+        # Fail fast: single+bitwarden is an invalid combination. Validate
+        # before exporting the personal vault so we don't leave a partial backup.
+        if org_export_mode == "single" and has_orgs and encryption_mode == "bitwarden":
+            logger.error(
+                "org_export_mode='single' is not supported with encryption_mode='bitwarden'. "
+                "Aborting backup. Use org_export_mode='multiple' or switch to "
+                "encryption_mode='raw' to export organizations."
+            )
+            return 1
+
+        # Export personal vault
+        # Use simple filename when org exports are disabled to maintain backward compatibility
+        if has_orgs:
+            personal_file = os.path.join(backup_dir, f"backup_{timestamp}_personal.enc")
+        else:
+            personal_file = os.path.join(backup_dir, f"backup_{timestamp}.enc")
 
         logger.info(f"Starting export with mode: '{encryption_mode}'")
 
         if encryption_mode == "raw":
-            source.export_raw_encrypted(backup_file, file_pw)
+            source.export_raw_encrypted(personal_file, file_pw)
         elif encryption_mode == "bitwarden":
-            source.export_bitwarden_encrypted(backup_file, file_pw)
+            source.export_bitwarden_encrypted(personal_file, file_pw)
         else:
             logger.error(
                 f"Invalid BACKUP_ENCRYPTION_MODE: '{encryption_mode}'. Must be 'bitwarden' or 'raw'."
             )
-            return
+            return 1
 
-        logger.info(f"Export completed successfully to {backup_file}.")
+        logger.info(f"Personal vault export completed to {personal_file}.")
+
+        # Export organizations
+        # None means default to "none" for safe upgrade (existing users don't get unexpected exports)
+        if org_export_mode is None:
+            org_export_mode = "none"
+            logger.info(
+                "org_export_mode not configured, defaulting to 'none' for safe upgrade"
+            )
+
+        if org_export_mode == "none":
+            logger.info("Organization exports disabled by user configuration")
+        elif org_export_mode == "single" and has_orgs:
+            if encryption_mode == "raw":
+                all_org_data = {}
+                for org_id in org_ids:
+                    try:
+                        org_data = source.export_organization_raw(org_id)
+                        all_org_data[org_id] = org_data
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to export organization {org_id}: {e}. Skipping org."
+                        )
+
+                if not all_org_data:
+                    logger.error(
+                        f"No organizations exported successfully. "
+                        f"Skipping combined org backup (backup_{timestamp}_orgs.enc)."
+                    )
+                    return 1
+                else:
+                    combined_data = json.dumps(all_org_data).encode("utf-8")
+                    encrypted_data = source.encrypt_data(combined_data, file_pw)
+                    org_file = os.path.join(backup_dir, f"backup_{timestamp}_orgs.enc")
+                    with open(org_file, "wb") as f:
+                        f.write(encrypted_data)
+                    logger.info(f"Organization export completed to {org_file}.")
+
+        elif org_export_mode == "multiple" and has_orgs:
+            failures = []
+            for org_id in org_ids:
+                safe_suffix = safe_suffixes.get(org_id, org_id)
+                org_file = os.path.join(
+                    backup_dir, f"backup_{timestamp}_org-{safe_suffix}.enc"
+                )
+                try:
+                    if encryption_mode == "raw":
+                        source.export_organization_raw_encrypted(
+                            org_file, file_pw, org_id
+                        )
+                    elif encryption_mode == "bitwarden":
+                        source.export_organization_bitwarden(org_file, file_pw, org_id)
+                    logger.info(f"Organization export completed: {org_file}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to export organization {org_id}: {e}. Skipping org."
+                    )
+                    failures.append(org_id)
+            if failures:
+                logger.error(
+                    f"Failed to export {len(failures)} organization(s): {failures}. "
+                    f"Backup incomplete."
+                )
+                return 1
+        return 0
     finally:
         source.logout()
         logger.info("Successfully logged out.")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
