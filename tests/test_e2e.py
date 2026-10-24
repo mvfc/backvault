@@ -370,7 +370,7 @@ class TestE2EBackup:
             bw_session["bw_env"]["BITWARDENCLI_APPDATA_DIR"],
         )
 
-        client = BitwardenClient(session=bw_session["session"], server=VAULTWARDEN_URL)
+        client = BitwardenClient(session=bw_session["session"])
 
         backup_file = tmp_path / "personal_raw.enc"
         client.export_raw_encrypted(str(backup_file), "backup_password")
@@ -465,9 +465,13 @@ class TestE2EErrorHandling:
 
     def test_invalid_session_handling(self, bw_session):
         """Test that invalid session is handled gracefully."""
-        invalid_env = {**bw_session["bw_env"], "BW_SESSION": "invalid_session_key"}
+        invalid_env = {
+            **bw_session["bw_env"],
+            "BW_SESSION": "invalid_session_key",
+            "BW_NOINTERACTION": "true",
+        }
         result = subprocess.run(
-            ["bw", "list", "items"],
+            ["bw", "--nointeraction", "list", "items"],
             capture_output=True,
             text=True,
             env=invalid_env,

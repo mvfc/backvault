@@ -78,6 +78,7 @@ class BitwardenClient:
         if server:
             logger.debug(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
+            env["BW_NOINTERACTION"] = "true"
             try:
                 sprun(
                     [self.bw_cmd, "config", "server", server],
@@ -143,6 +144,7 @@ class BitwardenClient:
         """
         if env is None:
             env = os.environ.copy()
+        env["BW_NOINTERACTION"] = "true"
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
