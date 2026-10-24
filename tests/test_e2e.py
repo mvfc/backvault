@@ -11,7 +11,6 @@ Run with:
     VAULTWARDEN_URL=http://localhost:8888 \
     BW_TEST_EMAIL=test@example.com \
     BW_TEST_PASSWORD=testpassword123 \
-    BW_TEST_MASTER_PASSWORD=masterpassword123 \
     uv run pytest tests/test_e2e.py -v -m e2e
 """
 
@@ -29,7 +28,7 @@ from urllib.request import Request, urlopen
 import pytest
 from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 
 pytestmark = pytest.mark.e2e
 
@@ -38,7 +37,6 @@ VAULTWARDEN_PORT = str(urlparse(VAULTWARDEN_URL).port or 80)
 IMAGE_NAME = os.getenv("IMAGE_NAME", "backvault:latest")
 TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
-TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", TEST_PASSWORD)
 
 
 def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
@@ -54,11 +52,11 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     mp_hash = hashlib.pbkdf2_hmac("sha256", master_key, password_bytes, 1, dklen=32)
     master_password_hash = base64.b64encode(mp_hash).decode("utf-8")
 
-    # Stretched master key via HKDF
-    enc_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"enc").derive(
+    # Stretched master key via HKDFExpand
+    enc_key = HKDFExpand(algorithm=hashes.SHA256(), length=32, info=b"enc").derive(
         master_key
     )
-    mac_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"mac").derive(
+    mac_key = HKDFExpand(algorithm=hashes.SHA256(), length=32, info=b"mac").derive(
         master_key
     )
 
@@ -112,8 +110,6 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             err_body = e.read().decode("utf-8", errors="ignore")
             if e.code in (400, 409) and "already" in err_body.lower():
                 return
-            elif e.code in (200, 201, 204):
-                return
             elif e.code == 404:
                 last_err = f"404 on {endpoint}"
                 continue
@@ -125,10 +121,9 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             last_err = str(e)
             continue
 
-    if last_err:
-        raise RuntimeError(
-            f"Vaultwarden registration failed on all endpoints. Last error: {last_err}"
-        )
+    raise RuntimeError(
+        f"Vaultwarden registration failed on all endpoints {endpoints}. Last error: {last_err}"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -228,11 +223,21 @@ def bw_env(tmp_path_factory):
 @pytest.fixture(scope="function")
 def bw_session(vaultwarden_container, bw_env):
     """Create Bitwarden CLI session by logging in."""
+
+    def handle_error(msg: str):
+        if os.getenv("CI"):
+            pytest.fail(msg)
+        else:
+            pytest.skip(msg)
+
     subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
 
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
 
-    ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
+    try:
+        ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
+    except Exception as e:
+        handle_error(f"No usable test account; provisioning failed: {e}")
 
     result = subprocess.run(
         [
@@ -248,7 +253,7 @@ def bw_session(vaultwarden_container, bw_env):
     )
 
     if result.returncode != 0:
-        pytest.skip(f"No usable test account; login failed: {result.stderr.strip()}")
+        handle_error(f"No usable test account; login failed: {result.stderr.strip()}")
 
     session = result.stdout.strip()
 
@@ -256,7 +261,7 @@ def bw_session(vaultwarden_container, bw_env):
         [
             "bw",
             "unlock",
-            TEST_MASTER_PASSWORD,
+            TEST_PASSWORD,
             "--raw",
         ],
         capture_output=True,
@@ -265,7 +270,7 @@ def bw_session(vaultwarden_container, bw_env):
     )
 
     if result.returncode != 0:
-        pytest.skip(f"No usable test account; unlock failed: {result.stderr.strip()}")
+        handle_error(f"No usable test account; unlock failed: {result.stderr.strip()}")
 
     session = result.stdout.strip()
     bw_env["BW_SESSION"] = session

@@ -293,7 +293,7 @@ Extract it with any 7-Zip compatible tool:
 7z x backup_20250101_120000_attachments.7z
 
 # or with py7zr (pip install py7zr); prompts for the password
-python -m py7zr x backup_20250101_120000_attachments.7z ./attachments
+python -m py7zr x -p backup_20250101_120000_attachments.7z ./attachments
 ```
 
 The result contains one folder per vault item, named after the item id (matching the `id` field in the JSON export), with that item's attachments inside:

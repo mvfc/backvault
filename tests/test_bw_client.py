@@ -586,3 +586,29 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert [cmd[-1] for cmd in commands] == [
         str(tmp_path / path) for path in expected_paths
     ]
+
+
+def test_py7zr_extraction_with_password(tmp_path):
+    """
+    Tests that an encrypted archive created by BitwardenClient can be extracted using py7zr.
+    """
+    import py7zr
+
+    client = BitwardenClient()
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "sample.txt").write_text("hello py7zr")
+
+    archive_path = tmp_path / "attachments.7z"
+    password = "secret_archive_password"
+    client.create_encrypted_archive(str(src_dir), str(archive_path), password)
+
+    assert archive_path.exists()
+
+    output_dir = tmp_path / "extracted"
+    output_dir.mkdir()
+
+    with py7zr.SevenZipFile(archive_path, "r", password=password) as archive:
+        archive.extractall(path=output_dir)
+
+    assert (output_dir / "sample.txt").read_text() == "hello py7zr"

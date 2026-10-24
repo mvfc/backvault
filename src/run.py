@@ -213,7 +213,7 @@ def main():
                         f"No organizations exported successfully. "
                         f"Skipping combined org backup (backup_{timestamp}_orgs.enc)."
                     )
-                    return 1
+                    org_export_failed = True
                 else:
                     combined_data = json.dumps(all_org_data).encode("utf-8")
                     encrypted_data = source.encrypt_data(combined_data, file_pw)
@@ -253,10 +253,7 @@ def main():
                     f"Failed to export {len(failures)} organization(s): {failures}. "
                     f"Backup incomplete."
                 )
-                return 1
-
-        if org_discovery_failed or org_export_failed:
-            return 1
+                org_export_failed = True
 
         if os.getenv("BACKUP_ATTACHMENTS", "").lower() in ("1", "true", "yes"):
             archive_file = os.path.join(
@@ -300,6 +297,9 @@ def main():
                     logger.warning(
                         f"Failed to remove temporary attachment directory: {e}"
                     )
+
+        if org_discovery_failed or org_export_failed:
+            return 1
 
         return 0
     finally:
