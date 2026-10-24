@@ -75,20 +75,12 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
 
     payload = {
-        "name": "E2E Test User",
-        "Name": "E2E Test User",
         "email": email_clean,
-        "Email": email_clean,
         "masterPasswordHash": master_password_hash,
-        "MasterPasswordHash": master_password_hash,
-        "masterPasswordHint": None,
-        "MasterPasswordHint": None,
+        "masterPasswordHint": "",
         "key": enc_sym_key,
-        "Key": enc_sym_key,
         "kdf": 0,
-        "Kdf": 0,
         "kdfIterations": 600000,
-        "KdfIterations": 600000,
     }
 
     headers = {
@@ -98,7 +90,6 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 
     endpoints = (
         "/api/accounts/register",
-        "/api/accounts",
         "/identity/accounts/register",
     )
 
