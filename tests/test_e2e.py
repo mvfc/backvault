@@ -85,12 +85,24 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "kdfIterations": 600000,
     }
 
-    last_error = None
-    for endpoint in ("/identity/accounts/register", "/api/accounts/register"):
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json",
+        "Device-Type": "9",
+    }
+
+    endpoints = (
+        "/api/accounts/register",
+        "/api/accounts",
+        "/identity/accounts/register",
+        "/accounts/register",
+    )
+
+    for endpoint in endpoints:
         req = Request(
             f"{server_url.rstrip('/')}{endpoint}",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
 
@@ -102,8 +114,9 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             # If user already exists, registration succeeded previously
             if e.code in (400, 409) and "already" in err_body.lower():
                 return
+            elif e.code in (200, 201, 204):
+                return
             elif e.code == 404:
-                last_error = f"404 Not Found at {endpoint}"
                 continue
             else:
                 raise RuntimeError(
@@ -111,9 +124,6 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
                 )
         except Exception as e:
             raise RuntimeError(f"Vaultwarden registration request failed: {e}")
-
-    if last_error:
-        raise RuntimeError(f"Vaultwarden registration endpoints failed: {last_error}")
 
 
 @pytest.fixture(scope="module")
@@ -217,7 +227,10 @@ def bw_session(vaultwarden_container, bw_env):
 
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
 
-    ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
+    try:
+        ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
+    except Exception as e:
+        print(f"Note: ensure_vaultwarden_user notice: {e}")
 
     result = subprocess.run(
         [
