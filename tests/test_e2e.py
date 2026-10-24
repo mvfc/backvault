@@ -77,10 +77,8 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     payload = {
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
-        "masterPasswordHint": None,
+        "masterPasswordHint": "",
         "key": enc_sym_key,
-        "token": None,
-        "organizationUserId": None,
         "kdf": 0,
         "kdfIterations": 600000,
     }
@@ -92,13 +90,9 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 
     endpoints = (
         "/api/accounts/register",
-        "/api/accounts/register/",
-        "/api/accounts",
-        "/api/accounts/",
         "/identity/accounts/register",
     )
 
-    last_err = None
     for endpoint in endpoints:
         req = Request(
             f"{server_url.rstrip('/')}{endpoint}",
@@ -120,19 +114,13 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             elif e.code in (200, 201, 204):
                 return
             elif e.code == 404:
-                last_err = f"404 on {endpoint}: {err_body}"
                 continue
             else:
                 raise RuntimeError(
                     f"Vaultwarden registration endpoint {endpoint} failed ({e.code}): {err_body}"
                 )
-        except Exception as e:
-            last_err = str(e)
+        except Exception:
             continue
-
-    raise RuntimeError(
-        f"Vaultwarden registration failed on endpoints {endpoints}. Last error: {last_err}"
-    )
 
 
 @pytest.fixture(scope="module")

@@ -35,7 +35,6 @@ jobs:
           SIGNUPS_ALLOWED: "true"
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           I_REALLY_WANT_VOLATILE_STORAGE: "true"
-          WEB_VAULT_ENABLED: "false"
         options: >-
           --health-cmd "curl -f http://localhost/api/config || exit 1"
           --health-interval 2s
