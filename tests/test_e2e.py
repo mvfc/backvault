@@ -89,6 +89,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     }
 
     endpoints = (
+        "/api/accounts",
         "/api/accounts/register",
         "/identity/accounts/register",
         "/identity/register",
