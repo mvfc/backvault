@@ -77,7 +77,12 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     payload = {
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
+        "masterPasswordHint": None,
         "key": enc_sym_key,
+        "token": None,
+        "organizationUserId": None,
+        "kdf": 0,
+        "kdfIterations": 600000,
     }
 
     headers = {
@@ -85,26 +90,49 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "Accept": "application/json",
     }
 
-    req = Request(
-        f"{server_url.rstrip('/')}/api/accounts/register",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
+    endpoints = (
+        "/api/accounts/register",
+        "/api/accounts/register/",
+        "/api/accounts",
+        "/api/accounts/",
+        "/identity/accounts/register",
     )
 
-    try:
-        with urlopen(req, timeout=10) as resp:
-            if resp.status in (200, 201, 204):
+    last_err = None
+    for endpoint in endpoints:
+        req = Request(
+            f"{server_url.rstrip('/')}{endpoint}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201, 204):
+                    return
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            if e.code in (400, 409) and (
+                "already" in err_body.lower() or "exist" in err_body.lower()
+            ):
                 return
-    except HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="ignore")
-        if e.code in (400, 409) and (
-            "already" in err_body.lower() or "exist" in err_body.lower()
-        ):
-            return
-        raise RuntimeError(f"Vaultwarden registration failed ({e.code}): {err_body}")
-    except Exception as e:
-        raise RuntimeError(f"Vaultwarden registration request failed: {e}")
+            elif e.code in (200, 201, 204):
+                return
+            elif e.code == 404:
+                last_err = f"404 on {endpoint}: {err_body}"
+                continue
+            else:
+                raise RuntimeError(
+                    f"Vaultwarden registration endpoint {endpoint} failed ({e.code}): {err_body}"
+                )
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    raise RuntimeError(
+        f"Vaultwarden registration failed on endpoints {endpoints}. Last error: {last_err}"
+    )
 
 
 @pytest.fixture(scope="module")
