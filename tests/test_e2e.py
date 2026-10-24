@@ -77,10 +77,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     payload = {
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
-        "masterPasswordHint": "",
         "key": enc_sym_key,
-        "kdf": 0,
-        "kdfIterations": 600000,
     }
 
     headers = {
