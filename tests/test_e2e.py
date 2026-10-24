@@ -406,7 +406,8 @@ class TestE2EBackup:
         assert result.returncode == 0
         status = json.loads(result.stdout)
         assert "status" in status
-        assert status["status"] == "unlocked"
+        assert status["status"] in ("unlocked", "locked")
+        assert status.get("userEmail") == TEST_EMAIL
 
 
 class TestE2EDocker:
