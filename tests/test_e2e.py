@@ -467,7 +467,7 @@ class TestE2EErrorHandling:
         """Test that invalid session is handled gracefully."""
         invalid_env = {**bw_session["bw_env"], "BW_SESSION": "invalid_session_key"}
         result = subprocess.run(
-            ["bw", "status"],
+            ["bw", "list", "items"],
             capture_output=True,
             text=True,
             env=invalid_env,

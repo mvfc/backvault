@@ -134,13 +134,15 @@ class BitwardenClient:
         text: bool = True,
         capture_output: bool = True,
         check: bool = True,
-        env=os.environ.copy(),
+        env: dict | None = None,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         """
+        if env is None:
+            env = os.environ.copy()
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
