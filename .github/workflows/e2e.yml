@@ -109,7 +109,7 @@ jobs:
 
       - name: Install Bitwarden CLI
         run: |
-          npm install -g @bitwarden/cli
+          npm install -g @bitwarden/cli@2025.10.0
 
       - name: Install dependencies
         run: |
