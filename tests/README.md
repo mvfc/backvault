@@ -44,6 +44,7 @@ uv run pytest tests/test_cli_integration.py -v
 docker run -d --name vaultwarden-test \
   -p 8080:80 \
   -e SIGNUPS_ALLOWED=true \
+  -e I_REALLY_WANT_VOLATILE_STORAGE=true \
   vaultwarden/server:latest
 ```
 
@@ -59,7 +60,6 @@ sleep 10
 export VAULTWARDEN_URL=http://localhost:8080
 export BW_TEST_EMAIL=your-test-email@example.com
 export BW_TEST_PASSWORD=your-test-password
-export BW_TEST_MASTER_PASSWORD=your-master-password
 ```
 
 ## Run E2E tests
@@ -78,7 +78,7 @@ bw config server http://localhost:8080
 bw login $BW_TEST_EMAIL --password $BW_TEST_PASSWORD
 
 # Unlock
-bw unlock $BW_TEST_MASTER_PASSWORD --raw
+bw unlock $BW_TEST_PASSWORD --raw
 
 # Export vault
 bw export --format json --password backup_password

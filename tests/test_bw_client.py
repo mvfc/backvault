@@ -298,6 +298,41 @@ def test_run_method_error_handling(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
+def test_export_organization_methods_pass_logout_on_error_false(mock_sprun):
+    """
+    Tests that export_organization_raw and export_organization_bitwarden
+    pass logout_on_error=False to _run so failures do not trigger logout.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+    client = BitwardenClient(session="test_session")
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_raw("org-123")
+
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+    mock_sprun.reset_mock()
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_bitwarden("/tmp/backup.enc", "file_pw", "org-123")
+
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+
+@patch("src.bw_client.sprun")
 def test_run_method_json_parse_error_does_not_log_raw_output(mock_sprun, caplog):
     """
     Tests that a JSON parse failure does not log the raw command output

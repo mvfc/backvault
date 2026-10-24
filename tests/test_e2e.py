@@ -225,6 +225,8 @@ def vaultwarden_container():
             "SIGNUPS_ALLOWED=true",
             "-e",
             "ADMIN_TOKEN=admin_secret_token_for_testing",
+            "-e",
+            "I_REALLY_WANT_VOLATILE_STORAGE=true",
             "vaultwarden/server:latest",
         ],
         check=True,
@@ -418,6 +420,8 @@ class TestE2EDocker:
             capture_output=True,
         )
         if result.returncode != 0:
+            if os.getenv("CI"):
+                pytest.fail(f"Image not built yet: {IMAGE_NAME}")
             pytest.skip(f"Image not built yet: {IMAGE_NAME}")
 
         required_binaries = ["bw", "supercronic", "python3", "sqlcipher"]
@@ -447,11 +451,9 @@ class TestE2EDocker:
         )
         if result.returncode != 0:
             err = (result.stderr or "").lower()
-            if (
-                "unable to find image" in err
-                or "pull access denied" in err
-                or "not found" in err
-            ):
+            if "unable to find image" in err or "pull access denied" in err:
+                if os.getenv("CI"):
+                    pytest.fail(f"Image not built yet: {IMAGE_NAME}")
                 pytest.skip("Image not built yet")
             pytest.fail(f"Docker image check failed: {result.stderr}")
 

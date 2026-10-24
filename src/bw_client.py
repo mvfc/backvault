@@ -136,6 +136,7 @@ class BitwardenClient:
         capture_output: bool = True,
         check: bool = True,
         env: dict | None = None,
+        logout_on_error: bool = True,
     ) -> Any:
         """
         Run a bw CLI command safely.
@@ -186,19 +187,20 @@ class BitwardenClient:
             if isinstance(e, CalledProcessError) and e.stderr:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
             logger.error(f"Failed to run command: {masked_e}")
-            try:
-                sprun(
-                    [self.bw_cmd, "logout"],
-                    text=text,
-                    capture_output=capture_output,
-                    check=True,
-                    env=env,
-                )
-            except Exception as inner_e:
-                logger.error(
-                    f"Failed to log out after error. Failure: "
-                    f"{self._redact_text(_safe_error(inner_e), env)}"
-                )
+            if logout_on_error:
+                try:
+                    sprun(
+                        [self.bw_cmd, "logout"],
+                        text=text,
+                        capture_output=capture_output,
+                        check=True,
+                        env=env,
+                    )
+                except Exception as inner_e:
+                    logger.error(
+                        f"Failed to log out after error. Failure: "
+                        f"{self._redact_text(_safe_error(inner_e), env)}"
+                    )
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -380,6 +382,7 @@ class BitwardenClient:
         return self._run(
             cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
             capture_json=True,
+            logout_on_error=False,
         )
 
     def export_organization_bitwarden(
@@ -405,6 +408,7 @@ class BitwardenClient:
                 file_pw,
             ],
             capture_json=False,
+            logout_on_error=False,
         )
 
     def export_organization_raw_encrypted(
