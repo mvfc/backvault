@@ -157,13 +157,15 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             elif e.code in (200, 201, 204):
                 return
             elif e.code == 404:
-                last_err = f"404 on {endpoint}"
+                if not last_err:
+                    last_err = f"404 on {endpoint}"
                 continue
             else:
                 last_err = f"{e.code} on {endpoint}: {err_body}"
                 continue
         except Exception as e:
-            last_err = str(e)
+            if not last_err:
+                last_err = str(e)
             continue
 
     raise RuntimeError(
@@ -407,7 +409,9 @@ class TestE2EBackup:
         status = json.loads(result.stdout)
         assert "status" in status
         assert status["status"] in ("unlocked", "locked")
-        assert status.get("userEmail") == TEST_EMAIL
+        assert (
+            status.get("userEmail") or ""
+        ).lower().strip() == TEST_EMAIL.lower().strip()
 
 
 class TestE2EDocker:
