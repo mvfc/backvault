@@ -20,6 +20,6 @@ echo "INFO: Starting cleanup of backups older than $RETAIN_DAYS days in $BACKUP_
 # Use find to delete files.
 # -mtime +N means files modified more than N*24 hours ago.
 # We use RETAIN_DAYS directly. For example, if RETAIN_DAYS=7, files older than 7 days will be deleted.
-find "$BACKUP_DIR" -type f -name "*.enc" -mtime "+$RETAIN_DAYS" -print -delete -xdev -maxdepth 1
+find "$BACKUP_DIR" -type f \( -name "*.enc" -o -name "*_attachments.7z" \) -mtime "+$RETAIN_DAYS" -print -delete -xdev -maxdepth 1
 
 echo "INFO: Cleanup finished."

@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from subprocess import CalledProcessError, run as sprun
 import json
@@ -77,6 +78,7 @@ class BitwardenClient:
         if server:
             logger.debug(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
+            env["BW_NOINTERACTION"] = "true"
             try:
                 sprun(
                     [self.bw_cmd, "config", "server", server],
@@ -133,13 +135,16 @@ class BitwardenClient:
         text: bool = True,
         capture_output: bool = True,
         check: bool = True,
-        env=os.environ.copy(),
+        env: dict | None = None,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         """
+        if env is None:
+            env = os.environ.copy()
+        env["BW_NOINTERACTION"] = "true"
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
@@ -418,3 +423,62 @@ class BitwardenClient:
         )
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
+
+    def list_items_with_attachments(self) -> list[dict[str, Any]]:
+        """Return vault items that have at least one attachment."""
+        items = self._run(cmd=["list", "items"], capture_json=True)
+        return [i for i in items if i.get("attachments")]
+
+    def download_attachments(self, dest_dir: str) -> int:
+        """
+        Download all attachments into dest_dir/<item id>/<file name>.
+        Returns the number of downloaded files.
+        """
+        count = 0
+        for item in self.list_items_with_attachments():
+            item_id = item["id"]
+            if not re.fullmatch(r"[A-Za-z0-9-]+", str(item_id)):
+                logger.warning("Skipping item with unexpected id format")
+                continue
+            item_dir = os.path.join(dest_dir, item_id)
+            os.makedirs(item_dir, exist_ok=True)
+            used: set[str] = set()
+            for att in item["attachments"]:
+                name = os.path.basename(str(att.get("fileName") or "")).strip()
+                if name in ("", ".", ".."):
+                    name = "attachment"
+                if name in used:
+                    stem, ext = os.path.splitext(name)
+                    i = 1
+                    while f"{stem}_{i}{ext}" in used:
+                        i += 1
+                    name = f"{stem}_{i}{ext}"
+                self._run(
+                    cmd=[
+                        "get",
+                        "attachment",
+                        att["id"],
+                        "--itemid",
+                        item_id,
+                        "--output",
+                        os.path.join(item_dir, name),
+                    ],
+                    capture_json=False,
+                )
+                used.add(name)
+                count += 1
+        logger.info(f"Downloaded {count} attachment(s).")
+        return count
+
+    def create_encrypted_archive(
+        self, src_dir: str, archive_path: str, password: str
+    ) -> None:
+        """Create a password-protected 7z archive of src_dir's contents."""
+        import py7zr
+
+        with py7zr.SevenZipFile(
+            archive_path, "w", password=password, header_encryption=True
+        ) as archive:
+            for name in os.listdir(src_dir):
+                archive.writeall(os.path.join(src_dir, name), arcname=name)
+        logger.info(f"Attachments archive created at {archive_path}.")
