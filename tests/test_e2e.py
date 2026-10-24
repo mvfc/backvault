@@ -21,9 +21,7 @@ import json
 import os
 import subprocess
 import time
-from urllib.error import HTTPError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 import pytest
 from cryptography.hazmat.primitives import hashes, padding
@@ -83,47 +81,70 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "kdfIterations": 600000,
     }
 
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-    endpoints = (
-        "/api/accounts/register",
-        "/identity/accounts/register",
+    url = f"{server_url.rstrip('/')}/api/accounts/register"
+    result = subprocess.run(
+        [
+            "curl",
+            "-s",
+            "-i",
+            "-X",
+            "POST",
+            url,
+            "-H",
+            "Content-Type: application/json",
+            "-H",
+            "Accept: application/json",
+            "-d",
+            json.dumps(payload),
+        ],
+        capture_output=True,
+        text=True,
     )
 
-    last_err = None
-    for endpoint in endpoints:
-        req = Request(
-            f"{server_url.rstrip('/')}{endpoint}",
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers,
-            method="POST",
+    out = result.stdout or ""
+    if (
+        "HTTP/1.1 2" in out
+        or "HTTP/2 2" in out
+        or "200 OK" in out
+        or "201 Created" in out
+    ):
+        return
+    if "already" in out.lower() or "exist" in out.lower():
+        return
+
+    if "404" in out:
+        fallback_url = f"{server_url.rstrip('/')}/identity/accounts/register"
+        res2 = subprocess.run(
+            [
+                "curl",
+                "-s",
+                "-i",
+                "-X",
+                "POST",
+                fallback_url,
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                "Accept: application/json",
+                "-d",
+                json.dumps(payload),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        out2 = res2.stdout or ""
+        if (
+            "HTTP/1.1 2" in out2
+            or "HTTP/2 2" in out2
+            or "already" in out2.lower()
+            or "exist" in out2.lower()
+        ):
+            return
+        raise RuntimeError(
+            f"Vaultwarden registration failed ({url}): {out}\nFallback ({fallback_url}): {out2}"
         )
 
-        try:
-            with urlopen(req, timeout=10) as resp:
-                if resp.status in (200, 201, 204):
-                    return
-        except HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="ignore")
-            if e.code in (400, 409) and "already" in err_body.lower():
-                return
-            elif e.code == 404:
-                last_err = f"404 on {endpoint}"
-                continue
-            else:
-                raise RuntimeError(
-                    f"Vaultwarden registration endpoint {endpoint} failed ({e.code}): {err_body}"
-                )
-        except Exception as e:
-            last_err = str(e)
-            continue
-
-    raise RuntimeError(
-        f"Vaultwarden registration failed on all endpoints {endpoints}. Last error: {last_err}"
-    )
+    raise RuntimeError(f"Vaultwarden registration rejected: {out}")
 
 
 @pytest.fixture(scope="module")
