@@ -65,10 +65,14 @@ jobs:
             exit 1
           fi
 
-      - name: Pull test image
-        run: |
-          docker pull docker.io/mvflc/backvault:test
-          docker tag docker.io/mvflc/backvault:test ${{ env.IMAGE_NAME }}:test
+      - name: Build test image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Wait for Vaultwarden
         run: |

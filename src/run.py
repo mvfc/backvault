@@ -301,50 +301,8 @@ def main():
         if org_discovery_failed or org_export_failed:
             return 1
 
-        logger.info(f"Export completed successfully to {backup_file}.")
-
-        if os.getenv("BACKUP_ATTACHMENTS", "").lower() in ("1", "true", "yes"):
-            archive_file = os.path.join(
-                backup_dir, f"backup_{timestamp}_attachments.7z"
-            )
-            tmp_dir = tempfile.mkdtemp(prefix="backvault_attachments_")
-            try:
-                count = source.download_attachments(tmp_dir)
-                if count:
-                    with tempfile.TemporaryDirectory(
-                        prefix="backvault_archive_"
-                    ) as archive_dir:
-                        tmp_archive = os.path.join(
-                            archive_dir, os.path.basename(archive_file)
-                        )
-                        source.create_encrypted_archive(tmp_dir, tmp_archive, file_pw)
-                        fd, staged_archive = tempfile.mkstemp(
-                            prefix=".backvault_archive_", suffix=".tmp", dir=backup_dir
-                        )
-                        try:
-                            os.close(fd)
-                            shutil.copy2(tmp_archive, staged_archive)
-                            os.replace(staged_archive, archive_file)
-                        finally:
-                            try:
-                                if os.path.exists(staged_archive):
-                                    os.remove(staged_archive)
-                            except OSError as e:
-                                logger.warning(
-                                    f"Failed to remove temporary archive: {e}"
-                                )
-                else:
-                    logger.info("No attachments found; skipping archive.")
-            except Exception as e:
-                logger.error(f"Attachment backup failed: {e}")
-                raise
-            finally:
-                try:
-                    shutil.rmtree(tmp_dir)
-                except OSError as e:
-                    logger.warning(
-                        f"Failed to remove temporary attachment directory: {e}"
-                    )
+        logger.info(f"Export completed successfully to {personal_file}.")
+        return 0
     finally:
         source.logout()
         logger.info("Successfully logged out.")
