@@ -518,7 +518,8 @@ def test_require_env_exists():
     },
 )
 def test_main_attachments_archive_and_cleanup(
-    mock_bw_client, mock_get_key, mock_db_connect, mock_copy, mock_rmtree, mock_replace
+    mock_bw_client, mock_get_key, mock_db_connect, mock_copy, mock_rmtree,
+    mock_replace
 ):
     """
     Tests that enabled attachment backup creates an archive with downloaded attachments and cleans up temporary files.

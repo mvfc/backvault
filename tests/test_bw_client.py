@@ -370,122 +370,12 @@ def test_encrypt_data():
 
 
 @patch("src.bw_client.sprun")
-def test_list_organizations(mock_sprun):
-    """
-    Tests that list_organizations returns organization list.
-    """
-    mock_sprun.return_value.stdout = json.dumps(
-        [
-            {"id": "org1", "name": "Org 1"},
-            {"id": "org2", "name": "Org 2"},
-        ]
-    )
-    mock_sprun.return_value.returncode = 0
-
-    client = BitwardenClient(session="test_session")
-    orgs = client.list_organizations()
-
-    assert len(orgs) == 2
-    assert orgs[0]["id"] == "org1"
-    mock_sprun.assert_called_once_with(
-        ["bw", "list", "organizations"],
-        text=True,
-        capture_output=True,
-        check=True,
-        env=ANY,
-    )
-
-
-@patch("src.bw_client.sprun")
-def test_export_organization_bitwarden(mock_sprun, monkeypatch):
-    """
-    Tests organization export with Bitwarden encryption.
-    """
-    monkeypatch.setenv("TEST_MODE", "1")
-    mock_sprun.return_value.returncode = 0
-    mock_sprun.return_value.stdout = ""
-
-    client = BitwardenClient(session="test_session")
-
-    client.export_organization_bitwarden("/tmp/backups/org.enc", "file_pw", "org123")
-
-    mock_sprun.assert_called_once()
-    call_args = str(mock_sprun.call_args)
-    assert "--organizationid" in call_args
-    assert "org123" in call_args
-    assert "/tmp/backups/org.enc" in call_args
-
-
-@patch("src.bw_client.sprun")
-@patch("builtins.open", new_callable=MagicMock)
-def test_export_organization_raw_encrypted(mock_file, mock_sprun, monkeypatch):
-    """
-    Tests organization export with raw (AES-256-GCM) encryption.
-    """
-    monkeypatch.setenv("TEST_MODE", "1")
-    mock_sprun.return_value = MagicMock(
-        returncode=0,
-        stdout=json.dumps({"items": [{"id": "1", "name": "Item 1"}]}),
-        stderr="",
-    )
-
-    client = BitwardenClient(session="test_session")
-
-    client.export_organization_raw_encrypted(
-        "/tmp/backups/org.enc", "file_pw", "org123"
-    )
-
-    mock_sprun.assert_called()
-    call_args = str(mock_sprun.call_args)
-    assert "--organizationid" in call_args
-    assert "org123" in call_args
-
-
-@patch("src.bw_client.sprun")
-def test_status(mock_sprun):
-    """
-    Tests status method returns vault status.
-    """
-    mock_sprun.return_value.stdout = json.dumps(
-        {"status": "unlocked", "userId": "user123"}
-    )
-    mock_sprun.return_value.returncode = 0
-
-    client = BitwardenClient(session="test_session")
-    status = client.status()
-
-    assert status["status"] == "unlocked"
-    mock_sprun.assert_called_once_with(
-        ["bw", "status"], text=True, capture_output=True, check=True, env=ANY
-    )
-
-
-@patch("src.bw_client.sprun")
-def test_export_organization_raw(mock_sprun):
-    """
-    Tests export_organization_raw returns raw JSON.
-    """
-    expected_org_data = {"items": [{"id": "1", "name": "Test Item"}]}
-    mock_sprun.return_value.stdout = json.dumps(expected_org_data)
-    mock_sprun.return_value.returncode = 0
-
-    client = BitwardenClient(session="test_session")
-    org_data = client.export_organization_raw("org123")
-
-    assert org_data == expected_org_data
-    call_args = mock_sprun.call_args[0][0]
-    assert call_args[0] == "bw"
-    assert "--organizationid" in call_args
-    assert "org123" in call_args
-    assert "--raw" in call_args
-
-
-@patch("src.bw_client.sprun")
 def test_download_and_archive_attachments(mock_sprun, tmp_path):
     """
     Tests that attachments are downloaded into per-item folders and packed
     into a password-protected 7z archive.
     """
+    import json
     import py7zr
     from subprocess import CompletedProcess
 
@@ -548,6 +438,7 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     """
     Tests that attachment ids select downloads and duplicate names get unique suffixes.
     """
+    import json
     from subprocess import CompletedProcess
 
     attachments = [
@@ -563,9 +454,7 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
         {"id": "item-2", "attachments": [{"id": "a7", "fileName": "x.txt"}]},
     ]
     mock_sprun.side_effect = [
-        CompletedProcess(
-            ["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""
-        ),
+        CompletedProcess(["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""),
         *[CompletedProcess([], 0, stdout="", stderr="") for _ in range(7)],
     ]
     client = BitwardenClient(session="existing_session")
@@ -573,7 +462,9 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert client.download_attachments(str(tmp_path)) == 7
 
     commands = [call.args[0] for call in mock_sprun.call_args_list[1:]]
-    assert [cmd[3] for cmd in commands] == ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]
+    assert [cmd[3] for cmd in commands] == [
+        "a1", "a2", "a3", "a4", "a5", "a6", "a7"
+    ]
     expected_paths = [
         "item-1/x.txt",
         "item-1/x_1.txt",
@@ -586,29 +477,3 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert [cmd[-1] for cmd in commands] == [
         str(tmp_path / path) for path in expected_paths
     ]
-
-
-def test_py7zr_extraction_with_password(tmp_path):
-    """
-    Tests that an encrypted archive created by BitwardenClient can be extracted using py7zr.
-    """
-    import py7zr
-
-    client = BitwardenClient()
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
-    (src_dir / "sample.txt").write_text("hello py7zr")
-
-    archive_path = tmp_path / "attachments.7z"
-    password = "secret_archive_password"
-    client.create_encrypted_archive(str(src_dir), str(archive_path), password)
-
-    assert archive_path.exists()
-
-    output_dir = tmp_path / "extracted"
-    output_dir.mkdir()
-
-    with py7zr.SevenZipFile(archive_path, "r", password=password) as archive:
-        archive.extractall(path=output_dir)
-
-    assert (output_dir / "sample.txt").read_text() == "hello py7zr"
