@@ -135,7 +135,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "/register",
     )
 
-    last_err = None
+    errors: list[str] = []
     for endpoint in endpoints:
         req = Request(
             f"{server_url.rstrip('/')}{endpoint}",
@@ -156,20 +156,14 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
                 return
             elif e.code in (200, 201, 204):
                 return
-            elif e.code == 404:
-                if not last_err:
-                    last_err = f"404 on {endpoint}"
-                continue
             else:
-                last_err = f"{e.code} on {endpoint}: {err_body}"
-                continue
+                errors.append(f"{endpoint} ({e.code}): {err_body or 'HTTP Error'}")
         except Exception as e:
-            if not last_err:
-                last_err = str(e)
-            continue
+            errors.append(f"{endpoint}: {e}")
 
+    err_summary = "; ".join(errors) if errors else "No endpoints responded."
     raise RuntimeError(
-        f"Vaultwarden registration failed on all endpoints. Last error: {last_err}"
+        f"Vaultwarden registration failed on all endpoints. Errors: {err_summary}"
     )
 
 
