@@ -79,25 +79,23 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     payload = {
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
-        "masterPasswordHint": None,
         "key": enc_sym_key,
         "kdf": 0,
         "kdfIterations": 600000,
     }
 
     headers = {
-        "Content-Type": "application/json; charset=utf-8",
+        "Content-Type": "application/json",
         "Accept": "application/json",
-        "Device-Type": "9",
     }
 
     endpoints = (
         "/api/accounts/register",
         "/api/accounts",
         "/identity/accounts/register",
-        "/accounts/register",
     )
 
+    last_err = None
     for endpoint in endpoints:
         req = Request(
             f"{server_url.rstrip('/')}{endpoint}",
@@ -107,23 +105,30 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         )
 
         try:
-            with urlopen(req, timeout=10):
-                return
+            with urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201, 204):
+                    return
         except HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
-            # If user already exists, registration succeeded previously
             if e.code in (400, 409) and "already" in err_body.lower():
                 return
             elif e.code in (200, 201, 204):
                 return
             elif e.code == 404:
+                last_err = f"404 on {endpoint}"
                 continue
             else:
                 raise RuntimeError(
-                    f"Vaultwarden registration rejected ({e.code}): {err_body}"
+                    f"Vaultwarden registration endpoint {endpoint} failed ({e.code}): {err_body}"
                 )
         except Exception as e:
-            raise RuntimeError(f"Vaultwarden registration request failed: {e}")
+            last_err = str(e)
+            continue
+
+    if last_err:
+        raise RuntimeError(
+            f"Vaultwarden registration failed on all endpoints. Last error: {last_err}"
+        )
 
 
 @pytest.fixture(scope="module")
@@ -227,10 +232,7 @@ def bw_session(vaultwarden_container, bw_env):
 
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
 
-    try:
-        ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
-    except Exception as e:
-        print(f"Note: ensure_vaultwarden_user notice: {e}")
+    ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
 
     result = subprocess.run(
         [
