@@ -313,6 +313,12 @@ def test_export_organization_methods_pass_logout_on_error_false(mock_sprun):
     with pytest.raises(BitwardenError):
         client.export_organization_raw("org-123")
 
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
     logout_calls = [
         call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
     ]
@@ -324,8 +330,16 @@ def test_export_organization_methods_pass_logout_on_error_false(mock_sprun):
     )
 
     with pytest.raises(BitwardenError):
-        client.export_organization_bitwarden("/tmp/backup.enc", "file_pw", "org-123")
+        client.export_organization_bitwarden(
+            "/app/backups/backup.enc", "file_pw", "org-123"
+        )
 
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
     logout_calls = [
         call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
     ]
