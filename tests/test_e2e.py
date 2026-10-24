@@ -74,6 +74,44 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 
     enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
 
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    # Step 1: Request registration verification token
+    verify_url = (
+        f"{server_url.rstrip('/')}/identity/accounts/register/send-verification-email"
+    )
+    verify_payload = {"email": email_clean, "name": "e2e"}
+
+    token = None
+    try:
+        req_verify = Request(
+            verify_url,
+            data=json.dumps(verify_payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urlopen(req_verify, timeout=10) as resp:
+            resp_bytes = resp.read()
+            if resp_bytes:
+                try:
+                    data = json.loads(resp_bytes.decode("utf-8"))
+                    token = (
+                        data
+                        if isinstance(data, str)
+                        else data.get("token") or data.get("raw")
+                    )
+                except Exception:
+                    token = resp_bytes.decode("utf-8").strip('"')
+    except HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        if "already" in err_body.lower() or "exist" in err_body.lower():
+            return
+    except Exception:
+        pass
+
     payload = {
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
@@ -82,16 +120,15 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "kdf": 0,
         "kdfIterations": 600000,
     }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    if token:
+        payload["emailVerificationToken"] = token
 
     endpoints = (
-        "/api/accounts",
-        "/api/accounts/register",
+        "/identity/accounts/register/finish",
+        "/api/accounts/register/finish",
         "/identity/accounts/register",
+        "/api/accounts/register",
+        "/api/accounts",
         "/identity/register",
         "/api/register",
         "/accounts/register",
@@ -123,15 +160,14 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
                 last_err = f"404 on {endpoint}"
                 continue
             else:
-                raise RuntimeError(
-                    f"Vaultwarden registration endpoint {endpoint} failed ({e.code}): {err_body}"
-                )
+                last_err = f"{e.code} on {endpoint}: {err_body}"
+                continue
         except Exception as e:
             last_err = str(e)
             continue
 
     raise RuntimeError(
-        f"Vaultwarden registration failed on all endpoints {endpoints}. Last error: {last_err}"
+        f"Vaultwarden registration failed on all endpoints. Last error: {last_err}"
     )
 
 
