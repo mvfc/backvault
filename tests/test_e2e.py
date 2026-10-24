@@ -85,6 +85,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
         "kdfIterations": 600000,
     }
 
+    last_error = None
     for endpoint in ("/identity/accounts/register", "/api/accounts/register"):
         req = Request(
             f"{server_url.rstrip('/')}{endpoint}",
@@ -95,16 +96,24 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 
         try:
             with urlopen(req, timeout=10):
-                break
+                return
         except HTTPError as e:
-            if e.code in (400, 409):
-                break
+            err_body = e.read().decode("utf-8", errors="ignore")
+            # If user already exists, registration succeeded previously
+            if e.code in (400, 409) and "already" in err_body.lower():
+                return
             elif e.code == 404:
+                last_error = f"404 Not Found at {endpoint}"
                 continue
             else:
-                raise
-        except Exception:
-            pass
+                raise RuntimeError(
+                    f"Vaultwarden registration rejected ({e.code}): {err_body}"
+                )
+        except Exception as e:
+            raise RuntimeError(f"Vaultwarden registration request failed: {e}")
+
+    if last_error:
+        raise RuntimeError(f"Vaultwarden registration endpoints failed: {last_error}")
 
 
 @pytest.fixture(scope="module")
