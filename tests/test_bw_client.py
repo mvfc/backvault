@@ -375,7 +375,6 @@ def test_download_and_archive_attachments(mock_sprun, tmp_path):
     Tests that attachments are downloaded into per-item folders and packed
     into a password-protected 7z archive.
     """
-    import json
     import py7zr
     from subprocess import CompletedProcess
 
@@ -438,7 +437,6 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     """
     Tests that attachment ids select downloads and duplicate names get unique suffixes.
     """
-    import json
     from subprocess import CompletedProcess
 
     attachments = [
@@ -454,7 +452,9 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
         {"id": "item-2", "attachments": [{"id": "a7", "fileName": "x.txt"}]},
     ]
     mock_sprun.side_effect = [
-        CompletedProcess(["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""),
+        CompletedProcess(
+            ["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""
+        ),
         *[CompletedProcess([], 0, stdout="", stderr="") for _ in range(7)],
     ]
     client = BitwardenClient(session="existing_session")
@@ -462,9 +462,7 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert client.download_attachments(str(tmp_path)) == 7
 
     commands = [call.args[0] for call in mock_sprun.call_args_list[1:]]
-    assert [cmd[3] for cmd in commands] == [
-        "a1", "a2", "a3", "a4", "a5", "a6", "a7"
-    ]
+    assert [cmd[3] for cmd in commands] == ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]
     expected_paths = [
         "item-1/x.txt",
         "item-1/x_1.txt",
