@@ -28,13 +28,7 @@ RUN apk update && apk add --no-cache \
 
 RUN apk upgrade -a
 
-# Create appgroup and appuser idempotently (GID/UID 1000 to match default PGID/PUID)
-RUN if ! getent group appgroup > /dev/null 2>&1; then \
-        addgroup -S -g 1000 appgroup; \
-    fi && \
-    if ! getent passwd appuser > /dev/null 2>&1; then \
-        adduser -S -u 1000 -G appgroup appuser; \
-    fi
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Install Bitwarden CLI
 RUN set -eux; \
@@ -88,4 +82,3 @@ ENV PYTHONPATH=/app
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["/app/run.sh"]
-

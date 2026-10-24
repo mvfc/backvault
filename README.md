@@ -19,7 +19,6 @@ It’s designed for hands-free, secure, and automated backups using the official
 * 📎 **Attachment Backups**: Packs all item attachments into an AES-256 encrypted 7-zip archive, with encrypted file names.
 * 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden
 * 🐳 Runs fully containerized — no setup or local dependencies required
-* 🏢 **Multi-Organization Support**: Export multiple organizations with flexible output options
 
 ---
 
@@ -92,36 +91,6 @@ Together, these changes make BackVault one of the most secure self-hosted Bitwar
 
 ---
 
-## 🏢 Multi-Organization Export
-
-BackVault supports backing up **multiple organizations** from your Bitwarden account. During setup, you can configure:
-
-1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to export all accessible organizations.
-2. **Export Mode**: Choose how organizations are exported:
-   - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`)
-   - **Separate files per organization**: Each org exported to its own file (`backup_{timestamp}_org-{org-id}.enc`)
-
-The personal vault is always exported separately (as `backup_{timestamp}.enc` or `backup_{timestamp}_personal.enc`).
-
-### Encryption Mode Compatibility
-
-**Important:** There is a compatibility requirement between encryption mode and organization export mode:
-
-- **`raw` encryption mode**: Supports both Single and Separate files export options.
-- **`bitwarden` encryption mode**: Only supports Separate files per organization. The Single combined option is **not supported** because Bitwarden CLI cannot produce a single merged org export.
-
-When using the default `bitwarden` encryption mode, select **"Separate files per organization"** in the setup UI. The Single combined option is only available when `BACKUP_ENCRYPTION_MODE=raw` is set in your environment.
-
-### Getting Organization IDs
-
-Run this command after logging in to find your organization IDs:
-
-```bash
-bw list organizations
-```
-
----
-
 ## 🧩 Docker Compose Example
 
 Here’s how to set it up with Docker Compose for easy management:
@@ -169,16 +138,13 @@ BackVault will automatically:
 | ------------------------------ | ---------------------------------------------- | -------- | --------------------------- |
 | `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | `https://vault.example.com` |
 | `BACKUP_INTERVAL_HOURS`        | Alternative to cron expression (integer hours) | ❌        | `12`                        |
-| `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. **Note:** `raw` is required for Single org export mode. | ❌ | `bitwarden` |
+| `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. | ❌ | `raw` |
 | `BACKUP_ATTACHMENTS`           | Set to `true` to also back up item attachments into an encrypted 7-zip archive. | ❌ | `true` |
 | `RETAIN_DAYS`                  | Days to keep backups. `7` by default. Set to `0` to disable cleanup. | ❌ | `7` |
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
-| `TZ` | Timezone for the container according to https://en.wikipedia.org/wiki/List_of_tz_database_time_zones | ❌ | `UTC` |
-| `PUID` | UID of the user to run as (non-root container) | ❌ | `1000` |
-| `PGID` | GID of the user to run as (non-root container) | ❌ | `1000` |
-
-> **Note:** Organization IDs and export mode are configured via the web setup UI, not environment variables. Use "Separate files per organization" when `BACKUP_ENCRYPTION_MODE=bitwarden` (default). 
+| `TZ` | Timezone for the container according to  https://en.wikipedia.org/wiki/List_of_tz_database_time_zones              | ❌        | `UTC`                         |
+| `PUID` |
 
 ---
 
@@ -293,7 +259,7 @@ Extract it with any 7-Zip compatible tool:
 7z x backup_20250101_120000_attachments.7z
 
 # or with py7zr (pip install py7zr); prompts for the password
-python -m py7zr x -p backup_20250101_120000_attachments.7z ./attachments
+python -m py7zr x backup_20250101_120000_attachments.7z ./attachments
 ```
 
 The result contains one folder per vault item, named after the item id (matching the `id` field in the JSON export), with that item's attachments inside:

@@ -78,7 +78,6 @@ class BitwardenClient:
         if server:
             logger.debug(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
-            env["BW_NOINTERACTION"] = "true"
             try:
                 sprun(
                     [self.bw_cmd, "config", "server", server],
@@ -123,7 +122,9 @@ class BitwardenClient:
                 if env.get(key):
                     secrets.add(env[key])
         redacted = text
-        for secret in sorted((s for s in secrets if s), key=len, reverse=True):
+        for secret in sorted(
+            (s for s in secrets if s), key=len, reverse=True
+        ):
             if secret in redacted:
                 redacted = redacted.replace(secret, "[REDACTED]")
         return redacted
@@ -135,16 +136,13 @@ class BitwardenClient:
         text: bool = True,
         capture_output: bool = True,
         check: bool = True,
-        env: dict | None = None,
+        env=os.environ.copy(),
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         """
-        if env is None:
-            env = os.environ.copy()
-        env["BW_NOINTERACTION"] = "true"
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
@@ -283,7 +281,9 @@ class BitwardenClient:
                 cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(cmd, capture_json=False, env=env)
+            self.session = self._run(
+                cmd, capture_json=False, env=env
+            )
             logger.info("Logged in successfully")
 
         return self.session
@@ -363,61 +363,6 @@ class BitwardenClient:
         raw_json = self._run(
             cmd=["export", "--format", "json", "--raw"], capture_json=True
         )
-        encrypted_data = self.encrypt_data(
-            json.dumps(raw_json).encode("utf-8"), file_pw
-        )
-        with open(backup_file, "wb") as f:
-            f.write(encrypted_data)
-
-    def list_organizations(self) -> list[dict[str, Any]]:
-        """List all organizations the user has access to."""
-        logger.info("Fetching organization list...")
-        return self._run(["list", "organizations"])
-
-    def export_organization_raw(self, org_id: str) -> dict[str, Any]:
-        """Export organization vault as raw JSON."""
-        logger.info(f"Exporting organization vault: {org_id}")
-        return self._run(
-            cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
-            capture_json=True,
-        )
-
-    def export_organization_bitwarden(
-        self, backup_file: str, file_pw: str, org_id: str
-    ):
-        """Export organization vault using Bitwarden's built-in encryption."""
-        try:
-            backup_file = validate_path(backup_file, "/app")
-        except BitwardenError as e:
-            logger.error(f"Invalid backup file path: {e}")
-            raise
-        logger.info(f"Exporting organization {org_id} with Bitwarden encryption...")
-        self._run(
-            cmd=[
-                "export",
-                "--organizationid",
-                org_id,
-                "--output",
-                backup_file,
-                "--format",
-                "encrypted_json",
-                "--password",
-                file_pw,
-            ],
-            capture_json=False,
-        )
-
-    def export_organization_raw_encrypted(
-        self, backup_file: str, file_pw: str, org_id: str
-    ):
-        """Export organization vault and encrypt it in-memory."""
-        try:
-            backup_file = validate_path(backup_file, "/app")
-        except BitwardenError as e:
-            logger.error(f"Invalid backup file path: {e}")
-            raise
-        logger.info(f"Exporting organization {org_id} with raw encryption...")
-        raw_json = self.export_organization_raw(org_id)
         encrypted_data = self.encrypt_data(
             json.dumps(raw_json).encode("utf-8"), file_pw
         )
