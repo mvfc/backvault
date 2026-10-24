@@ -75,7 +75,6 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
 
     payload = {
-        "name": "E2E Test User",
         "email": email_clean,
         "masterPasswordHash": master_password_hash,
         "masterPasswordHint": "",
@@ -87,14 +86,10 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "Bitwarden_CLI/2026.10.0",
     }
 
     endpoints = (
         "/api/accounts/register",
-        "/api/accounts/register/",
-        "/api/accounts",
-        "/api/accounts/",
         "/identity/accounts/register",
     )
 
@@ -128,7 +123,9 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
             last_err = str(e)
             continue
 
-    print(f"Notice: registration endpoints returned 404/error: {last_err}")
+    raise RuntimeError(
+        f"Vaultwarden registration failed on endpoints {endpoints}. Last error: {last_err}"
+    )
 
 
 @pytest.fixture(scope="module")
