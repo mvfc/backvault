@@ -30,7 +30,7 @@ VAULTWARDEN_PORT = str(urlparse(VAULTWARDEN_URL).port or 80)
 IMAGE_NAME = os.getenv("IMAGE_NAME", "backvault:latest")
 TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
-TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", "Master123!")
+TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", TEST_PASSWORD)
 
 
 @pytest.fixture(scope="module")
