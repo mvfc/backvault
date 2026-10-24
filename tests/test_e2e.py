@@ -11,17 +11,24 @@ Run with:
     VAULTWARDEN_URL=http://localhost:8888 \
     BW_TEST_EMAIL=test@example.com \
     BW_TEST_PASSWORD=testpassword123 \
-    BW_TEST_MASTER_PASSWORD=masterpassword123 \
     uv run pytest tests/test_e2e.py -v -m e2e
 """
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import subprocess
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import pytest
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
 
 pytestmark = pytest.mark.e2e
 
@@ -30,7 +37,74 @@ VAULTWARDEN_PORT = str(urlparse(VAULTWARDEN_URL).port or 80)
 IMAGE_NAME = os.getenv("IMAGE_NAME", "backvault:latest")
 TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
-TEST_MASTER_PASSWORD = os.getenv("BW_TEST_MASTER_PASSWORD", TEST_PASSWORD)
+
+
+def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
+    """Register a user account in Vaultwarden if not already registered."""
+    email_clean = email.lower().strip()
+    email_bytes = email_clean.encode("utf-8")
+    password_bytes = password.encode("utf-8")
+
+    # KDF 0: PBKDF2 SHA256 with 600,000 iterations
+    master_key = hashlib.pbkdf2_hmac(
+        "sha256", password_bytes, email_bytes, 600000, dklen=32
+    )
+    mp_hash = hashlib.pbkdf2_hmac("sha256", master_key, password_bytes, 1, dklen=32)
+    master_password_hash = base64.b64encode(mp_hash).decode("utf-8")
+
+    # Stretched master key via HKDFExpand
+    enc_key = HKDFExpand(algorithm=hashes.SHA256(), length=32, info=b"enc").derive(
+        master_key
+    )
+    mac_key = HKDFExpand(algorithm=hashes.SHA256(), length=32, info=b"mac").derive(
+        master_key
+    )
+
+    sym_key = os.urandom(64)
+    iv = os.urandom(16)
+
+    padder = padding.PKCS7(128).padder()
+    padded_sym_key = padder.update(sym_key) + padder.finalize()
+
+    cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv))
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded_sym_key) + encryptor.finalize()
+
+    hmac_val = hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
+
+    enc_sym_key = f"2.{base64.b64encode(iv).decode()}|{base64.b64encode(ct).decode()}|{base64.b64encode(hmac_val).decode()}"
+
+    payload = {
+        "email": email_clean,
+        "masterPasswordHash": master_password_hash,
+        "key": enc_sym_key,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    req = Request(
+        f"{server_url.rstrip('/')}/api/accounts/register",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urlopen(req, timeout=10) as resp:
+            if resp.status in (200, 201, 204):
+                return
+    except HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        if e.code in (400, 409) and (
+            "already" in err_body.lower() or "exist" in err_body.lower()
+        ):
+            return
+        raise RuntimeError(f"Vaultwarden registration failed ({e.code}): {err_body}")
+    except Exception as e:
+        raise RuntimeError(f"Vaultwarden registration request failed: {e}")
 
 
 @pytest.fixture(scope="module")
@@ -129,18 +203,15 @@ def bw_env(tmp_path_factory):
 
 @pytest.fixture(scope="function")
 def bw_session(vaultwarden_container, bw_env):
-    """Create Bitwarden CLI session by logging in.
-
-    Skips when a usable account cannot be provisioned. Creating a usable
-    account against a fresh Vaultwarden requires reproducing Bitwarden's
-    client-side key derivation, which is out of scope for these tests; a
-    pre-provisioned account (e.g. a Bitwarden server or an
-    already-initialized Vaultwarden) must be supplied via the BW_TEST_*
-    environment variables for these login-based tests to run.
-    """
+    """Create Bitwarden CLI session by logging in."""
     subprocess.run(["bw", "config", "server", VAULTWARDEN_URL], check=True, env=bw_env)
 
     subprocess.run(["bw", "logout"], capture_output=True, env=bw_env)
+
+    try:
+        ensure_vaultwarden_user(VAULTWARDEN_URL, TEST_EMAIL, TEST_PASSWORD)
+    except Exception as e:
+        print(f"Notice: ensure_vaultwarden_user result: {e}")
 
     result = subprocess.run(
         [
@@ -156,10 +227,7 @@ def bw_session(vaultwarden_container, bw_env):
     )
 
     if result.returncode != 0:
-        pytest.skip(
-            f"No usable test account; login in CI requires a provisioned "
-            f"Bitwarden server. Login failed: {result.stderr.strip()}"
-        )
+        pytest.fail(f"No usable test account; login failed: {result.stderr.strip()}")
 
     session = result.stdout.strip()
 
@@ -167,7 +235,7 @@ def bw_session(vaultwarden_container, bw_env):
         [
             "bw",
             "unlock",
-            TEST_MASTER_PASSWORD,
+            TEST_PASSWORD,
             "--raw",
         ],
         capture_output=True,
@@ -176,7 +244,7 @@ def bw_session(vaultwarden_container, bw_env):
     )
 
     if result.returncode != 0:
-        pytest.skip(f"No usable test account; unlock failed: {result.stderr.strip()}")
+        pytest.fail(f"No usable test account; unlock failed: {result.stderr.strip()}")
 
     session = result.stdout.strip()
     bw_env["BW_SESSION"] = session
