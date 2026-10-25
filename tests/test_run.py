@@ -19,16 +19,20 @@ from subprocess import CompletedProcess
         "TEST_MODE": "1",
     },
 )
-def test_main_missing_database_settings(mock_get_key, mock_db_connect):
+def test_main_missing_database_settings(mock_get_key, mock_db_connect, caplog):
     """
     Tests that main logs missing settings and returns 1 when required DB keys are missing.
     """
     mock_db_connect.return_value = (MagicMock(), MagicMock())
     mock_get_key.side_effect = ["test_client_id", None, None, "test_file_pw"]
 
-    result = main()
+    with caplog.at_level("ERROR"):
+        result = main()
 
     assert result == 1
+    assert "client_secret" in caplog.text
+    assert "master_password" in caplog.text
+    assert "Please rerun setup" in caplog.text
 
 
 @patch("src.run.db_connect")
