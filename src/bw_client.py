@@ -337,7 +337,8 @@ class BitwardenClient:
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
 
-        self.session = result
+        if result:
+            self.session = result
         logger.info("Vault unlocked successfully")
         return self.session
 
