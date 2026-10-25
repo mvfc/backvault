@@ -40,12 +40,16 @@ TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
 
 
 def extract_bw_token(stdout_str: str) -> str:
-    """Extract raw session token from stdout, ignoring runtime/node deprecation warnings."""
+    """Extract raw session token from stdout, ignoring runtime/node deprecation warnings and text with spaces."""
     lines = [line.strip() for line in stdout_str.splitlines() if line.strip()]
     for line in reversed(lines):
-        if not line.startswith("(") and not line.startswith("DeprecationWarning"):
+        if (
+            " " not in line
+            and not line.startswith("(")
+            and not line.startswith("DeprecationWarning")
+        ):
             return line
-    return lines[-1] if lines else ""
+    return ""
 
 
 def _is_warning_text(text: str) -> bool:
