@@ -48,6 +48,24 @@ def extract_bw_token(stdout_str: str) -> str:
     return lines[-1] if lines else ""
 
 
+def _is_warning_text(text: str) -> bool:
+    """Return True if text consists only of whitespace or permitted runtime/deprecation warning lines."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if not (
+            line.startswith("(")
+            or line.startswith("DeprecationWarning")
+            or line.startswith("Warning")
+            or line.startswith("[")
+            or "DeprecationWarning" in line
+            or "Warning" in line
+            or "Could not find" in line
+            or "Saved setting" in line
+        ):
+            return False
+    return True
+
+
 def parse_json_output(output: str):
     """Parse JSON output from CLI command, handling warning lines in stdout."""
     output = output.strip()
@@ -58,8 +76,11 @@ def parse_json_output(output: str):
         for idx, char in enumerate(output):
             if char in ("{", "["):
                 try:
-                    val, _ = decoder.raw_decode(output, idx)
-                    return val
+                    val, end = decoder.raw_decode(output, idx)
+                    prefix = output[:idx]
+                    suffix = output[end:]
+                    if _is_warning_text(prefix) and _is_warning_text(suffix):
+                        return val
                 except json.JSONDecodeError:
                     continue
         raise
