@@ -353,10 +353,10 @@ def test_export_organization_methods_pass_logout_on_error_false(
 @patch("src.bw_client.sprun")
 def test_run_method_json_parse_with_prefix_warning(mock_sprun):
     """
-    Tests that the _run method handles JSON output prefixed with deprecation warnings.
+    Tests that the _run method handles JSON output prefixed with deprecation warnings containing brackets.
     """
     mock_sprun.return_value.stdout = (
-        '(node:1234) DeprecationWarning: punycode\n{"success": true}'
+        '(node:1234) [DEP0040] DeprecationWarning: punycode\n{"success": true}'
     )
     mock_sprun.return_value.stderr = ""
     mock_sprun.return_value.returncode = 0
