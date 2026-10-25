@@ -381,6 +381,7 @@ def bw_session(vaultwarden_container, bw_env, monkeypatch):
     except BitwardenError as e:
         handle_error(f"No usable test account; login/unlock failed: {e}")
 
+    session = extract_bw_token(session) or session
     bw_env["BW_SESSION"] = session
 
     yield {"session": session, "bw_env": bw_env}

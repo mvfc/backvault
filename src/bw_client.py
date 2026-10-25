@@ -50,7 +50,11 @@ def _is_warning_text(text: str) -> bool:
             line.startswith("(")
             or line.startswith("DeprecationWarning")
             or line.startswith("Warning")
-            or line.startswith("[")
+            or line.startswith("[NOTICE]")
+            or line.startswith("[WARNING]")
+            or line.startswith("[ERROR]")
+            or line.startswith("[DEP")
+            or line.startswith("[node")
             or "DeprecationWarning" in line
             or "Warning" in line
             or "Could not find" in line
