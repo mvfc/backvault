@@ -298,12 +298,16 @@ def test_run_method_error_handling(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
-def test_export_organization_methods_pass_logout_on_error_false(mock_sprun):
+def test_export_organization_methods_pass_logout_on_error_false(
+    mock_sprun, monkeypatch
+):
     """
     Tests that export_organization_raw and export_organization_bitwarden
     pass logout_on_error=False to _run so failures do not trigger logout.
     """
     from subprocess import CalledProcessError
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
 
     mock_sprun.side_effect = CalledProcessError(
         1, ["bw", "export"], stderr="Org export failed"

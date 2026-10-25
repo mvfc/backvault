@@ -78,7 +78,7 @@ bw config server http://localhost:8080
 bw login $BW_TEST_EMAIL --password $BW_TEST_PASSWORD
 
 # Unlock
-bw unlock $BW_TEST_PASSWORD --raw
+bw unlock "$BW_TEST_PASSWORD" --raw
 
 # Export vault
 bw export --format json --password backup_password

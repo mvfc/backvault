@@ -186,9 +186,25 @@ def vaultwarden_container():
     )
 
     if container_name in result.stdout:
-        print(f"Using existing container: {container_name}")
-        yield container_name
-        return
+        inspect_res = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{range .Config.Env}}{{println .}}{{end}}",
+                container_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if "I_REALLY_WANT_VOLATILE_STORAGE=true" in inspect_res.stdout:
+            print(f"Using existing container: {container_name}")
+            yield container_name
+            return
+        print(
+            f"Removing existing container missing volatile storage setting: {container_name}"
+        )
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
     result = subprocess.run(
         [
@@ -206,10 +222,28 @@ def vaultwarden_container():
     )
     if result.stdout.strip():
         container_names = result.stdout.strip().splitlines()
-        container_name = container_names[0] if container_names else ""
-        print(f"Using existing container on port {VAULTWARDEN_PORT}: {container_name}")
-        yield container_name
-        return
+        existing_name = container_names[0] if container_names else ""
+        inspect_res = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{range .Config.Env}}{{println .}}{{end}}",
+                existing_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if "I_REALLY_WANT_VOLATILE_STORAGE=true" in inspect_res.stdout:
+            print(
+                f"Using existing container on port {VAULTWARDEN_PORT}: {existing_name}"
+            )
+            yield existing_name
+            return
+        print(
+            f"Removing existing container missing volatile storage setting: {existing_name}"
+        )
+        subprocess.run(["docker", "rm", "-f", existing_name], capture_output=True)
 
     print(f"Starting Vaultwarden container: {container_name}")
     subprocess.run(
