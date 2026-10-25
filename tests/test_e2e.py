@@ -336,22 +336,26 @@ def bw_session(vaultwarden_container, bw_env):
 
     session = result.stdout.strip()
 
-    result = subprocess.run(
-        [
-            "bw",
-            "unlock",
-            TEST_PASSWORD,
-            "--raw",
-        ],
-        capture_output=True,
-        text=True,
-        env={**bw_env, "BW_SESSION": session},
-    )
+    if not session:
+        result = subprocess.run(
+            [
+                "bw",
+                "unlock",
+                TEST_PASSWORD,
+                "--raw",
+            ],
+            capture_output=True,
+            text=True,
+            env={**bw_env, "BW_SESSION": session},
+        )
 
-    if result.returncode != 0:
-        handle_error(f"No usable test account; unlock failed: {result.stderr.strip()}")
+        if result.returncode != 0:
+            handle_error(
+                f"No usable test account; unlock failed: {result.stderr.strip()}"
+            )
 
-    session = result.stdout.strip()
+        session = result.stdout.strip()
+
     bw_env["BW_SESSION"] = session
 
     yield {"session": session, "bw_env": bw_env}
