@@ -243,7 +243,15 @@ class BitwardenClient:
                             val, end = decoder.raw_decode(output, idx)
                             prefix = output[:idx]
                             suffix = output[end:]
-                            if _is_warning_text(prefix) and _is_warning_text(suffix):
+                            same_line_prefix = prefix.rpartition("\n")[2]
+                            if (
+                                _is_warning_text(prefix)
+                                and _is_warning_text(suffix)
+                                and not (
+                                    same_line_prefix.strip()
+                                    and _is_warning_text(same_line_prefix)
+                                )
+                            ):
                                 return val
                         except json.JSONDecodeError:
                             continue
@@ -409,7 +417,7 @@ class BitwardenClient:
     def list_organizations(self) -> list[dict[str, Any]]:
         """List all organizations the user has access to."""
         logger.info("Fetching organization list...")
-        return self._run(["list", "organizations"])
+        return self._run(["list", "organizations"], logout_on_error=False)
 
     def export_organization_raw(self, org_id: str) -> dict[str, Any]:
         """Export organization vault as raw JSON."""

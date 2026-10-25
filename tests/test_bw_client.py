@@ -258,6 +258,21 @@ def test_run_method_json_output(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_json_embedded_in_warning_line(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects candidate JSON embedded within a warning line.
+    """
+    mock_sprun.return_value.stdout = (
+        '(node:1234) [DEP0040] DeprecationWarning: punycode {"success": true}'
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
 def test_run_method_json_parse_rejects_truncated_outer_json(mock_sprun):
     """
     Tests that _run with capture_json=True rejects candidate nested JSON arrays/objects
@@ -354,11 +369,11 @@ def test_run_method_error_handling(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
-def test_export_organization_methods_pass_logout_on_error_false(
+def test_export_organization_and_list_organization_methods_pass_logout_on_error_false(
     mock_sprun, monkeypatch
 ):
     """
-    Tests that export_organization_raw and export_organization_bitwarden
+    Tests that list_organizations, export_organization_raw and export_organization_bitwarden
     pass logout_on_error=False to _run so failures do not trigger logout.
     """
     from subprocess import CalledProcessError
@@ -366,9 +381,27 @@ def test_export_organization_methods_pass_logout_on_error_false(
     monkeypatch.delenv("TEST_MODE", raising=False)
 
     mock_sprun.side_effect = CalledProcessError(
-        1, ["bw", "export"], stderr="Org export failed"
+        1, ["bw", "list"], stderr="List orgs failed"
     )
     client = BitwardenClient(session="test_session")
+
+    with pytest.raises(BitwardenError):
+        client.list_organizations()
+
+    list_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0][:2] == ["bw", "list"]
+    ]
+    assert len(list_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+    mock_sprun.reset_mock()
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
 
     with pytest.raises(BitwardenError):
         client.export_organization_raw("org-123")
