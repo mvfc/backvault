@@ -39,6 +39,15 @@ TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
 
 
+def extract_bw_token(stdout_str: str) -> str:
+    """Extract raw session token from stdout, ignoring runtime/node deprecation warnings."""
+    lines = [line.strip() for line in stdout_str.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if not line.startswith("(") and not line.startswith("DeprecationWarning"):
+            return line
+    return lines[-1] if lines else ""
+
+
 def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     """Register a user account in Vaultwarden if not already registered."""
     email_clean = email.lower().strip()
@@ -334,27 +343,24 @@ def bw_session(vaultwarden_container, bw_env):
     if result.returncode != 0:
         handle_error(f"No usable test account; login failed: {result.stderr.strip()}")
 
-    session = result.stdout.strip()
+    session = extract_bw_token(result.stdout)
 
-    if not session:
-        result = subprocess.run(
-            [
-                "bw",
-                "unlock",
-                TEST_PASSWORD,
-                "--raw",
-            ],
-            capture_output=True,
-            text=True,
-            env={**bw_env, "BW_SESSION": session},
-        )
+    result = subprocess.run(
+        [
+            "bw",
+            "unlock",
+            TEST_PASSWORD,
+            "--raw",
+        ],
+        capture_output=True,
+        text=True,
+        env={**bw_env, "BW_SESSION": session},
+    )
 
-        if result.returncode != 0:
-            handle_error(
-                f"No usable test account; unlock failed: {result.stderr.strip()}"
-            )
+    if result.returncode != 0:
+        handle_error(f"No usable test account; unlock failed: {result.stderr.strip()}")
 
-        session = result.stdout.strip()
+    session = extract_bw_token(result.stdout) or session
 
     bw_env["BW_SESSION"] = session
 
