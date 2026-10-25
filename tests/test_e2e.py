@@ -48,6 +48,24 @@ def extract_bw_token(stdout_str: str) -> str:
     return lines[-1] if lines else ""
 
 
+def parse_json_output(output: str):
+    """Parse JSON output from CLI command, handling warning lines in stdout."""
+    output = output.strip()
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        start_obj = output.find("{")
+        start_arr = output.find("[")
+        if start_obj != -1 or start_arr != -1:
+            start = min(s for s in (start_obj, start_arr) if s != -1)
+            end_obj = output.rfind("}")
+            end_arr = output.rfind("]")
+            end = max(end_obj, end_arr)
+            if start != -1 and end > start:
+                return json.loads(output[start : end + 1])
+        raise
+
+
 def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     """Register a user account in Vaultwarden if not already registered."""
     email_clean = email.lower().strip()
@@ -388,7 +406,7 @@ class TestE2EBackup:
         )
         assert result.returncode == 0
 
-        status = json.loads(result.stdout)
+        status = parse_json_output(result.stdout)
         assert status["status"] == "unlocked"
 
     def test_list_items(self, bw_session):
@@ -401,7 +419,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        items = json.loads(result.stdout)
+        items = parse_json_output(result.stdout)
         assert isinstance(items, list)
 
     def test_backup_personal_vault_raw_mode(self, bw_session, tmp_path, monkeypatch):
@@ -435,7 +453,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        orgs = json.loads(result.stdout)
+        orgs = parse_json_output(result.stdout)
         assert isinstance(orgs, list)
 
     def test_status_returns_user_info(self, bw_session):
@@ -448,7 +466,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        status = json.loads(result.stdout)
+        status = parse_json_output(result.stdout)
         assert "status" in status
         assert status["status"] in ("unlocked", "locked")
         assert (
