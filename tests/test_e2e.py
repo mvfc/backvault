@@ -171,6 +171,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 def vaultwarden_container():
     """Start Vaultwarden container for testing, clean up after."""
     container_name = "backvault-test-vaultwarden"
+    created_by_fixture = False
 
     result = subprocess.run(
         [
@@ -185,7 +186,7 @@ def vaultwarden_container():
         text=True,
     )
 
-    if container_name in result.stdout:
+    if container_name in result.stdout.splitlines():
         inspect_res = subprocess.run(
             [
                 "docker",
@@ -201,10 +202,10 @@ def vaultwarden_container():
             print(f"Using existing container: {container_name}")
             yield container_name
             return
-        print(
-            f"Removing existing container missing volatile storage setting: {container_name}"
+        pytest.fail(
+            f"Pre-existing container '{container_name}' is missing required "
+            "I_REALLY_WANT_VOLATILE_STORAGE=true setting."
         )
-        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
     result = subprocess.run(
         [
@@ -212,8 +213,6 @@ def vaultwarden_container():
             "ps",
             "--filter",
             f"publish={VAULTWARDEN_PORT}",
-            "--filter",
-            "ancestor=vaultwarden/server",
             "--format",
             "{{.Names}}",
         ],
@@ -240,10 +239,10 @@ def vaultwarden_container():
             )
             yield existing_name
             return
-        print(
-            f"Removing existing container missing volatile storage setting: {existing_name}"
+        pytest.fail(
+            f"Port {VAULTWARDEN_PORT} is in use by container '{existing_name}' "
+            "which is missing required I_REALLY_WANT_VOLATILE_STORAGE=true setting."
         )
-        subprocess.run(["docker", "rm", "-f", existing_name], capture_output=True)
 
     print(f"Starting Vaultwarden container: {container_name}")
     subprocess.run(
@@ -265,6 +264,7 @@ def vaultwarden_container():
         ],
         check=True,
     )
+    created_by_fixture = True
 
     max_attempts = 30
     for attempt in range(max_attempts):
@@ -283,11 +283,13 @@ def vaultwarden_container():
     else:
         pytest.fail("Vaultwarden failed to start")
 
-    yield container_name
-
-    print(f"Stopping Vaultwarden container: {container_name}")
-    subprocess.run(["docker", "stop", container_name], capture_output=True)
-    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+    try:
+        yield container_name
+    finally:
+        if created_by_fixture:
+            print(f"Stopping Vaultwarden container: {container_name}")
+            subprocess.run(["docker", "stop", container_name], capture_output=True)
+            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
 
 @pytest.fixture(scope="function")
