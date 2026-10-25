@@ -6,7 +6,7 @@ This document describes how to run tests for Backvault.
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv) package manager
-- Docker (for Docker/E2E tests)
+- Docker (for Docker/E2E tests; note that multi-platform Docker tests require QEMU/binfmt emulation on Docker Engine hosts, while Docker Desktop provides this support)
 - Bitwarden CLI (`bw`)
 
 ## Running Tests Locally
@@ -75,10 +75,10 @@ uv run pytest tests/test_e2e.py -v -m e2e
 bw config server http://localhost:8080
 
 # Login
-bw login $BW_TEST_EMAIL --password $BW_TEST_PASSWORD
+bw login "$BW_TEST_EMAIL" "$BW_TEST_PASSWORD"
 
 # Unlock
-bw unlock "$BW_TEST_PASSWORD" --raw
+export BW_SESSION=$(bw unlock "$BW_TEST_PASSWORD" --raw)
 
 # Export vault
 bw export --format encrypted_json --password backup_password

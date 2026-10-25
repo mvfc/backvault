@@ -70,7 +70,7 @@ EOF
         echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
     else
         echo "Running initial backup..."
-        ./run_wrapper.sh
+        ./run_wrapper.sh || echo "Initial backup failed; scheduler will retry at next interval."
     fi
 
     echo "Starting supercronic scheduler..."

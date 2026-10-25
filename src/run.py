@@ -42,6 +42,23 @@ def main():
     master_pw = get_key(db_conn, "master_password")
     file_pw = get_key(db_conn, "file_password")
 
+    missing_keys = []
+    if not client_id:
+        missing_keys.append("client_id")
+    if not client_secret:
+        missing_keys.append("client_secret")
+    if not master_pw:
+        missing_keys.append("master_password")
+    if not file_pw:
+        missing_keys.append("file_password")
+
+    if missing_keys:
+        logger.error(
+            f"Missing required database settings: {', '.join(missing_keys)}. "
+            "Please rerun setup."
+        )
+        return 1
+
     # Organization configuration
     org_ids_raw = get_key(db_conn, "organization_ids")
     org_export_mode_raw = get_key(db_conn, "org_export_mode")
