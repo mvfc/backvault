@@ -10,6 +10,29 @@ from subprocess import CompletedProcess
 
 @patch("src.run.db_connect")
 @patch("src.run.get_key")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_missing_database_settings(mock_get_key, mock_db_connect):
+    """
+    Tests that main logs missing settings and returns 1 when required DB keys are missing.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = ["test_client_id", None, None, "test_file_pw"]
+
+    result = main()
+
+    assert result == 1
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
 @patch("src.bw_client.sprun")
 @patch("src.run.BitwardenClient")
 @patch.dict(

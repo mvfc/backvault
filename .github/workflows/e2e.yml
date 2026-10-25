@@ -45,13 +45,15 @@ jobs:
         ports:
           - 8888:80
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@5927c260f7651dc96024be1e36725d207d61245e # v3.1.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@c2d334584e036e71954209bf0d46d0beeb63990d # v3.7.1
 
       - name: Cleanup appgroup
         run: |
@@ -68,7 +70,7 @@ jobs:
           fi
 
       - name: Build test image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
         with:
           context: .
           load: true
@@ -79,7 +81,7 @@ jobs:
       - name: Wait for Vaultwarden
         run: |
           for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null)
+            HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' -L "http://localhost:8888/api/config" 2>/dev/null || true)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Vaultwarden is ready (HTTP $HTTP_CODE)"
               exit 0
@@ -100,12 +102,12 @@ jobs:
           echo "Vaultwarden health check passed"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b926121e5d13014e0d23147202b970a9a404474 # v5.3.0
         with:
           python-version: '3.13'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a154216a449d724122e07250e319561a420b92f # v4.0.3
         with:
           node-version: '20'
 
