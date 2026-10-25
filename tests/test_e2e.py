@@ -500,7 +500,7 @@ class TestE2EDocker:
 
         for binary in required_binaries:
             result = subprocess.run(
-                ["docker", "run", "--rm", IMAGE_NAME, "which", binary],
+                ["docker", "run", "--rm", "--entrypoint", "which", IMAGE_NAME, binary],
                 capture_output=True,
             )
             assert result.returncode == 0, f"Binary {binary} not found in image"
@@ -512,8 +512,9 @@ class TestE2EDocker:
                 "docker",
                 "run",
                 "--rm",
-                IMAGE_NAME,
+                "--entrypoint",
                 "ls",
+                IMAGE_NAME,
                 "-la",
                 "/app/entrypoint.sh",
             ],

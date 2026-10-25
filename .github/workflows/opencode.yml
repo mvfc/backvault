@@ -13,19 +13,22 @@ jobs:
        github.event.comment.author_association == 'MEMBER' ||
        github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
+    concurrency:
+      group: opencode-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
-      id-token: write
+      id-token: write # Request an OIDC token to exchange for an OpenCode GitHub App installation token.
       contents: read
       issues: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Check for command
         id: check-command
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const body = context.payload.comment.body;
@@ -38,7 +41,7 @@ jobs:
 
       - name: Run opencode
         if: steps.check-command.outputs.is_command == 'true'
-        uses: anomalyco/opencode/github@v1.14.19
+        uses: anomalyco/opencode/github@27db54c859be74aa4caed3e58ae14ecc8bc34b30 # v1.14.19
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:

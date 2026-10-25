@@ -40,5 +40,8 @@ uv run pytest
 
 Multi-arch builds (amd64, arm64, arm/v7) use QEMU. Build with:
 ```bash
-docker buildx build --platform=linux/amd64,linux/arm64,linux/arm/v7 --load .
+for platform in linux/amd64 linux/arm64 linux/arm/v7; do
+    docker buildx build --platform=$platform --load -t myimage:$(echo $platform | tr '/' '-') .
+    docker run --rm --platform $platform myimage:$(echo $platform | tr '/' '-') bw --version
+done
 ```

@@ -81,7 +81,7 @@ bw login $BW_TEST_EMAIL --password $BW_TEST_PASSWORD
 bw unlock "$BW_TEST_PASSWORD" --raw
 
 # Export vault
-bw export --format json --password backup_password
+bw export --format encrypted_json --password backup_password
 
 # Check status
 bw status
@@ -114,8 +114,8 @@ Tests run automatically on GitHub Actions:
 
 | Workflow | Trigger | Jobs |
 |----------|---------|------|
-| `ci.yml` | Push/PR to main | Lint, Unit Tests, Docker Build |
-| `e2e.yml` | After CI success | E2E Tests with Vaultwarden |
+| `ci.yml` | Push/PR to main | Lint, Unit Tests, Docker Build; E2E before publishing on main pushes |
+| `e2e.yml` | Called by CI, matching PR paths, or manual dispatch | E2E Tests with Vaultwarden |
 
 ### Manual CI Run
 

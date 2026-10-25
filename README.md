@@ -98,19 +98,22 @@ BackVault supports backing up **multiple organizations** from your Bitwarden acc
 
 1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to export all accessible organizations.
 2. **Export Mode**: Choose how organizations are exported:
+   - **No organization exports (personal vault only)**: Skip organization exports (`none`).
    - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`)
    - **Separate files per organization**: Each org exported to its own file (`backup_{timestamp}_org-{org-id}.enc`)
 
-The personal vault is always exported separately (as `backup_{timestamp}.enc` or `backup_{timestamp}_personal.enc`).
+If `org_export_mode` is missing, it defaults to `none`. Upgraded installs must rerun setup to enable organization exports.
+
+The personal vault is exported separately (as `backup_{timestamp}.enc` or `backup_{timestamp}_personal.enc`) when the backup succeeds.
 
 ### Encryption Mode Compatibility
 
 **Important:** There is a compatibility requirement between encryption mode and organization export mode:
 
-- **`raw` encryption mode**: Supports both Single and Separate files export options.
-- **`bitwarden` encryption mode**: Only supports Separate files per organization. The Single combined option is **not supported** because Bitwarden CLI cannot produce a single merged org export.
+- **`raw` encryption mode**: Supports both Single and Separate files export options, as well as personal vault only.
+- **`bitwarden` encryption mode**: Supports Separate files per organization or personal vault only. Bitwarden CLI cannot produce a single merged org export.
 
-When using the default `bitwarden` encryption mode, select **"Separate files per organization"** in the setup UI. The Single combined option is only available when `BACKUP_ENCRYPTION_MODE=raw` is set in your environment.
+The UI offers **"Single combined file"** regardless of encryption mode. Selecting it with the default `bitwarden` mode when there are organizations to export causes `main()` to return `1` before the personal vault is exported, producing no backup. To export organizations with `bitwarden`, select **"Separate files per organization"**; for a combined file, set `BACKUP_ENCRYPTION_MODE=raw`.
 
 ### Getting Organization IDs
 
@@ -293,7 +296,7 @@ Extract it with any 7-Zip compatible tool:
 7z x backup_20250101_120000_attachments.7z
 
 # or with py7zr (pip install py7zr); prompts for the password
-python -m py7zr x -p backup_20250101_120000_attachments.7z ./attachments
+python -m py7zr x -P backup_20250101_120000_attachments.7z ./attachments
 ```
 
 The result contains one folder per vault item, named after the item id (matching the `id` field in the JSON export), with that item's attachments inside:

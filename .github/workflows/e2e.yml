@@ -4,15 +4,16 @@ permissions:
   actions: read
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   pull_request:
     paths:
       - 'tests/**'
       - '.github/workflows/e2e.yml'
       - 'src/**'
+      - 'Dockerfile'
+      - 'entrypoint.sh'
+      - 'pyproject.toml'
+      - 'uv.lock'
   workflow_dispatch:
 
 env:
@@ -24,10 +25,11 @@ jobs:
   e2e:
     name: E2E Tests
     if: >
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       vaultwarden:
         image: vaultwarden/server:latest
