@@ -272,6 +272,20 @@ def test_run_method_json_parse_rejects_truncated_outer_json(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_concatenated_json_objects(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects stdout containing
+    concatenated JSON objects (e.g. {} followed by {}).
+    """
+    mock_sprun.return_value.stdout = "{}\n{}"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
 def test_run_method_json_parse_rejects_multiple_top_level_json_values(mock_sprun):
     """
     Tests that _run with capture_json=True rejects stdout containing

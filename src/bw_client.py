@@ -43,23 +43,24 @@ def _safe_error(e: Exception) -> str:
 
 
 def _is_warning_text(text: str) -> bool:
-    """Return True if text consists only of whitespace or permitted runtime/deprecation warning lines."""
+    """Return True if text consists only of whitespace or recognized anchored runtime/deprecation warning lines."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in lines:
-        if not (
-            line.startswith("(")
-            or line.startswith("DeprecationWarning")
-            or line.startswith("Warning")
-            or line.startswith("[NOTICE]")
+        is_node_warn = line.startswith("(") and (")" in line)
+        is_dep_warn = line.startswith("DeprecationWarning") or line.startswith(
+            "Warning:"
+        )
+        is_bracket_warn = (
+            line.startswith("[NOTICE]")
             or line.startswith("[WARNING]")
             or line.startswith("[ERROR]")
             or line.startswith("[DEP")
             or line.startswith("[node")
-            or "DeprecationWarning" in line
-            or "Warning" in line
-            or "Could not find" in line
-            or "Saved setting" in line
-        ):
+        )
+        is_data_msg = line.startswith("Could not find") or line.startswith(
+            "Saved setting"
+        )
+        if not (is_node_warn or is_dep_warn or is_bracket_warn or is_data_msg):
             return False
     return True
 
