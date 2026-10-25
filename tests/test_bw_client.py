@@ -255,8 +255,64 @@ def test_run_method_json_output(mock_sprun):
     client = BitwardenClient()
     result = client._run(["status"], capture_json=True)
     assert result == {"success": True}
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_truncated_outer_json(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects candidate nested JSON arrays/objects
+    when prefix contains malformed/truncated outer JSON.
+    """
+    mock_sprun.return_value.stdout = '{"truncated": [1, 2, 3]'
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_concatenated_json_objects(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects stdout containing
+    concatenated JSON objects (e.g. {} followed by {}).
+    """
+    mock_sprun.return_value.stdout = "{}\n{}"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_multiple_top_level_json_values(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects stdout containing
+    multiple top-level JSON values (e.g. [] followed by [1, 2, 3]).
+    """
+    mock_sprun.return_value.stdout = "[]\n[1, 2, 3]"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_list_organizations_with_trailing_warning(mock_sprun):
+    """
+    Tests that list_organizations returns valid parsed array even when
+    stdout is followed by a deprecation warning line.
+    """
+    mock_sprun.return_value.stdout = "[]\n(node:1234) DeprecationWarning: punycode"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    result = client.list_organizations()
+    assert result == []
     mock_sprun.assert_called_once_with(
-        ["bw", "status"],
+        ["bw", "list", "organizations"],
         text=True,
         capture_output=True,
         check=True,
@@ -295,6 +351,74 @@ def test_run_method_error_handling(mock_sprun):
     client = BitwardenClient()
     with pytest.raises(BitwardenError):
         client._run(["status"])
+
+
+@patch("src.bw_client.sprun")
+def test_export_organization_methods_pass_logout_on_error_false(
+    mock_sprun, monkeypatch
+):
+    """
+    Tests that export_organization_raw and export_organization_bitwarden
+    pass logout_on_error=False to _run so failures do not trigger logout.
+    """
+    from subprocess import CalledProcessError
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+    client = BitwardenClient(session="test_session")
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_raw("org-123")
+
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+    mock_sprun.reset_mock()
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_bitwarden(
+            "/app/backups/backup.enc", "file_pw", "org-123"
+        )
+
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_with_prefix_warning(mock_sprun):
+    """
+    Tests that the _run method handles JSON output prefixed with deprecation warnings containing brackets.
+    """
+    mock_sprun.return_value.stdout = (
+        '(node:1234) [DEP0040] DeprecationWarning: punycode\n{"success": true}'
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    result = client._run(["status"], capture_json=True)
+    assert result == {"success": True}
 
 
 @patch("src.bw_client.sprun")

@@ -42,6 +42,29 @@ def _safe_error(e: Exception) -> str:
     return str(e)
 
 
+def _is_warning_text(text: str) -> bool:
+    """Return True if text consists only of whitespace or recognized anchored runtime/deprecation warning lines."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        is_node_warn = line.startswith("(") and (")" in line)
+        is_dep_warn = line.startswith("DeprecationWarning") or line.startswith(
+            "Warning:"
+        )
+        is_bracket_warn = (
+            line.startswith("[NOTICE]")
+            or line.startswith("[WARNING]")
+            or line.startswith("[ERROR]")
+            or line.startswith("[DEP")
+            or line.startswith("[node")
+        )
+        is_data_msg = line.startswith("Could not find") or line.startswith(
+            "Saved setting"
+        )
+        if not (is_node_warn or is_dep_warn or is_bracket_warn or is_data_msg):
+            return False
+    return True
+
+
 class BitwardenClient:
     def __init__(
         self,
@@ -136,6 +159,7 @@ class BitwardenClient:
         capture_output: bool = True,
         check: bool = True,
         env: dict | None = None,
+        logout_on_error: bool = True,
     ) -> Any:
         """
         Run a bw CLI command safely.
@@ -186,19 +210,20 @@ class BitwardenClient:
             if isinstance(e, CalledProcessError) and e.stderr:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
             logger.error(f"Failed to run command: {masked_e}")
-            try:
-                sprun(
-                    [self.bw_cmd, "logout"],
-                    text=text,
-                    capture_output=capture_output,
-                    check=True,
-                    env=env,
-                )
-            except Exception as inner_e:
-                logger.error(
-                    f"Failed to log out after error. Failure: "
-                    f"{self._redact_text(_safe_error(inner_e), env)}"
-                )
+            if logout_on_error:
+                try:
+                    sprun(
+                        [self.bw_cmd, "logout"],
+                        text=text,
+                        capture_output=capture_output,
+                        check=True,
+                        env=env,
+                    )
+                except Exception as inner_e:
+                    logger.error(
+                        f"Failed to log out after error. Failure: "
+                        f"{self._redact_text(_safe_error(inner_e), env)}"
+                    )
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -211,6 +236,17 @@ class BitwardenClient:
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
+                decoder = json.JSONDecoder()
+                for idx, char in enumerate(output):
+                    if char in ("{", "["):
+                        try:
+                            val, end = decoder.raw_decode(output, idx)
+                            prefix = output[:idx]
+                            suffix = output[end:]
+                            if _is_warning_text(prefix) and _is_warning_text(suffix):
+                                return val
+                        except json.JSONDecodeError:
+                            continue
                 logger.error("Failed to parse JSON output")
                 raise BitwardenError("Failed to parse JSON output")
         else:
@@ -302,7 +338,8 @@ class BitwardenClient:
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
 
-        self.session = result
+        if result:
+            self.session = result
         logger.info("Vault unlocked successfully")
         return self.session
 
@@ -380,6 +417,7 @@ class BitwardenClient:
         return self._run(
             cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
             capture_json=True,
+            logout_on_error=False,
         )
 
     def export_organization_bitwarden(
@@ -405,6 +443,7 @@ class BitwardenClient:
                 file_pw,
             ],
             capture_json=False,
+            logout_on_error=False,
         )
 
     def export_organization_raw_encrypted(

@@ -39,6 +39,62 @@ TEST_EMAIL = os.getenv("BW_TEST_EMAIL", "e2e@test.com")
 TEST_PASSWORD = os.getenv("BW_TEST_PASSWORD", "Test123!")
 
 
+def extract_bw_token(stdout_str: str) -> str:
+    """Extract raw session token from stdout, ignoring runtime/node deprecation warnings and text with spaces."""
+    lines = [line.strip() for line in stdout_str.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if (
+            " " not in line
+            and not line.startswith("(")
+            and not line.startswith("DeprecationWarning")
+        ):
+            return line
+    return ""
+
+
+def _is_warning_text(text: str) -> bool:
+    """Return True if text consists only of whitespace or recognized anchored runtime/deprecation warning lines."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        is_node_warn = line.startswith("(") and (")" in line)
+        is_dep_warn = line.startswith("DeprecationWarning") or line.startswith(
+            "Warning:"
+        )
+        is_bracket_warn = (
+            line.startswith("[NOTICE]")
+            or line.startswith("[WARNING]")
+            or line.startswith("[ERROR]")
+            or line.startswith("[DEP")
+            or line.startswith("[node")
+        )
+        is_data_msg = line.startswith("Could not find") or line.startswith(
+            "Saved setting"
+        )
+        if not (is_node_warn or is_dep_warn or is_bracket_warn or is_data_msg):
+            return False
+    return True
+
+
+def parse_json_output(output: str):
+    """Parse JSON output from CLI command, handling warning lines in stdout."""
+    output = output.strip()
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for idx, char in enumerate(output):
+            if char in ("{", "["):
+                try:
+                    val, end = decoder.raw_decode(output, idx)
+                    prefix = output[:idx]
+                    suffix = output[end:]
+                    if _is_warning_text(prefix) and _is_warning_text(suffix):
+                        return val
+                except json.JSONDecodeError:
+                    continue
+        raise
+
+
 def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
     """Register a user account in Vaultwarden if not already registered."""
     email_clean = email.lower().strip()
@@ -171,6 +227,7 @@ def ensure_vaultwarden_user(server_url: str, email: str, password: str) -> None:
 def vaultwarden_container():
     """Start Vaultwarden container for testing, clean up after."""
     container_name = "backvault-test-vaultwarden"
+    created_by_fixture = False
 
     result = subprocess.run(
         [
@@ -185,10 +242,26 @@ def vaultwarden_container():
         text=True,
     )
 
-    if container_name in result.stdout:
-        print(f"Using existing container: {container_name}")
-        yield container_name
-        return
+    if container_name in result.stdout.splitlines():
+        inspect_res = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{range .Config.Env}}{{println .}}{{end}}",
+                container_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if "I_REALLY_WANT_VOLATILE_STORAGE=true" in inspect_res.stdout:
+            print(f"Using existing container: {container_name}")
+            yield container_name
+            return
+        pytest.fail(
+            f"Pre-existing container '{container_name}' is missing required "
+            "I_REALLY_WANT_VOLATILE_STORAGE=true setting."
+        )
 
     result = subprocess.run(
         [
@@ -196,8 +269,6 @@ def vaultwarden_container():
             "ps",
             "--filter",
             f"publish={VAULTWARDEN_PORT}",
-            "--filter",
-            "ancestor=vaultwarden/server",
             "--format",
             "{{.Names}}",
         ],
@@ -206,10 +277,28 @@ def vaultwarden_container():
     )
     if result.stdout.strip():
         container_names = result.stdout.strip().splitlines()
-        container_name = container_names[0] if container_names else ""
-        print(f"Using existing container on port {VAULTWARDEN_PORT}: {container_name}")
-        yield container_name
-        return
+        existing_name = container_names[0] if container_names else ""
+        inspect_res = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{range .Config.Env}}{{println .}}{{end}}",
+                existing_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if "I_REALLY_WANT_VOLATILE_STORAGE=true" in inspect_res.stdout:
+            print(
+                f"Using existing container on port {VAULTWARDEN_PORT}: {existing_name}"
+            )
+            yield existing_name
+            return
+        pytest.fail(
+            f"Port {VAULTWARDEN_PORT} is in use by container '{existing_name}' "
+            "which is missing required I_REALLY_WANT_VOLATILE_STORAGE=true setting."
+        )
 
     print(f"Starting Vaultwarden container: {container_name}")
     subprocess.run(
@@ -225,33 +314,38 @@ def vaultwarden_container():
             "SIGNUPS_ALLOWED=true",
             "-e",
             "ADMIN_TOKEN=admin_secret_token_for_testing",
+            "-e",
+            "I_REALLY_WANT_VOLATILE_STORAGE=true",
             "vaultwarden/server:latest",
         ],
         check=True,
     )
+    created_by_fixture = True
 
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            result = subprocess.run(
-                ["curl", "-sf", f"{VAULTWARDEN_URL}/api/config"],
-                capture_output=True,
-                timeout=2,
-            )
-            if result.returncode == 0:
-                print(f"Vaultwarden ready after {attempt + 1} attempts")
-                break
-        except Exception:
-            pass
-        time.sleep(2)
-    else:
-        pytest.fail("Vaultwarden failed to start")
+    try:
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            try:
+                result = subprocess.run(
+                    ["curl", "-sf", f"{VAULTWARDEN_URL}/api/config"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    print(f"Vaultwarden ready after {attempt + 1} attempts")
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        else:
+            pytest.fail("Vaultwarden failed to start")
 
-    yield container_name
-
-    print(f"Stopping Vaultwarden container: {container_name}")
-    subprocess.run(["docker", "stop", container_name], capture_output=True)
-    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        yield container_name
+    finally:
+        if created_by_fixture:
+            print(f"Stopping Vaultwarden container: {container_name}")
+            subprocess.run(["docker", "stop", container_name], capture_output=True)
+            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
 
 @pytest.fixture(scope="function")
@@ -262,8 +356,8 @@ def bw_env(tmp_path_factory):
 
 
 @pytest.fixture(scope="function")
-def bw_session(vaultwarden_container, bw_env):
-    """Create Bitwarden CLI session by logging in."""
+def bw_session(vaultwarden_container, bw_env, monkeypatch):
+    """Create Bitwarden CLI session by logging in and unlocking."""
 
     def handle_error(msg: str):
         if os.getenv("CI"):
@@ -280,40 +374,20 @@ def bw_session(vaultwarden_container, bw_env):
     except Exception as e:
         handle_error(f"No usable test account; provisioning failed: {e}")
 
-    result = subprocess.run(
-        [
-            "bw",
-            "login",
-            TEST_EMAIL,
-            TEST_PASSWORD,
-            "--raw",
-        ],
-        capture_output=True,
-        text=True,
-        env={**bw_env, "BW_SESSION": ""},
-    )
+    for k, v in bw_env.items():
+        monkeypatch.setenv(k, v)
 
-    if result.returncode != 0:
-        handle_error(f"No usable test account; login failed: {result.stderr.strip()}")
+    from src.bw_client import BitwardenClient, BitwardenError
 
-    session = result.stdout.strip()
+    try:
+        client = BitwardenClient()
+        session = client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
+        if not session:
+            session = client.unlock(password=TEST_PASSWORD)
+    except BitwardenError as e:
+        handle_error(f"No usable test account; login/unlock failed: {e}")
 
-    result = subprocess.run(
-        [
-            "bw",
-            "unlock",
-            TEST_PASSWORD,
-            "--raw",
-        ],
-        capture_output=True,
-        text=True,
-        env={**bw_env, "BW_SESSION": session},
-    )
-
-    if result.returncode != 0:
-        handle_error(f"No usable test account; unlock failed: {result.stderr.strip()}")
-
-    session = result.stdout.strip()
+    session = extract_bw_token(session) or session
     bw_env["BW_SESSION"] = session
 
     yield {"session": session, "bw_env": bw_env}
@@ -340,7 +414,7 @@ class TestE2EBackup:
         )
         assert result.returncode == 0
 
-        status = json.loads(result.stdout)
+        status = parse_json_output(result.stdout)
         assert status["status"] == "unlocked"
 
     def test_list_items(self, bw_session):
@@ -353,7 +427,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        items = json.loads(result.stdout)
+        items = parse_json_output(result.stdout)
         assert isinstance(items, list)
 
     def test_backup_personal_vault_raw_mode(self, bw_session, tmp_path, monkeypatch):
@@ -387,7 +461,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        orgs = json.loads(result.stdout)
+        orgs = parse_json_output(result.stdout)
         assert isinstance(orgs, list)
 
     def test_status_returns_user_info(self, bw_session):
@@ -400,7 +474,7 @@ class TestE2EBackup:
         )
 
         assert result.returncode == 0
-        status = json.loads(result.stdout)
+        status = parse_json_output(result.stdout)
         assert "status" in status
         assert status["status"] in ("unlocked", "locked")
         assert (
@@ -418,6 +492,8 @@ class TestE2EDocker:
             capture_output=True,
         )
         if result.returncode != 0:
+            if os.getenv("CI"):
+                pytest.fail(f"Image not built yet: {IMAGE_NAME}")
             pytest.skip(f"Image not built yet: {IMAGE_NAME}")
 
         required_binaries = ["bw", "supercronic", "python3", "sqlcipher"]
@@ -447,11 +523,9 @@ class TestE2EDocker:
         )
         if result.returncode != 0:
             err = (result.stderr or "").lower()
-            if (
-                "unable to find image" in err
-                or "pull access denied" in err
-                or "not found" in err
-            ):
+            if "unable to find image" in err or "pull access denied" in err:
+                if os.getenv("CI"):
+                    pytest.fail(f"Image not built yet: {IMAGE_NAME}")
                 pytest.skip("Image not built yet")
             pytest.fail(f"Docker image check failed: {result.stderr}")
 

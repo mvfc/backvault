@@ -124,6 +124,45 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     os.environ,
     {
         "BW_SERVER": "https://test.server",
+        "BACKUP_ENCRYPTION_MODE": "raw",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_deduplicates_configured_org_ids(
+    mock_bw_client, mock_get_key, mock_db_connect
+):
+    """
+    Tests that duplicate organization IDs in configured_org_ids are deduplicated
+    while preserving order.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        " org-1, org-2, org-1, org-3 , org-2 ",  # organization_ids with duplicates and extra spaces
+        "multiple",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+
+    main()
+
+    assert mock_client_instance.export_organization_raw_encrypted.call_count == 3
+    calls = mock_client_instance.export_organization_raw_encrypted.call_args_list
+    exported_org_ids = [call.args[2] for call in calls]
+    assert exported_org_ids == ["org-1", "org-2", "org-3"]
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
         "BACKUP_ENCRYPTION_MODE": "invalid",
         "BACKUP_DIR": "/tmp/backups",
         "DB_PATH": "/tmp/db.db",

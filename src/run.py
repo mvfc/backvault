@@ -50,7 +50,9 @@ def main():
     if raw_value is not None and raw_value not in ("single", "multiple", "none"):
         logger.warning(f"Invalid org_export_mode '{raw_value}', ignoring")
     configured_org_ids = (
-        [org.strip() for org in org_ids_raw.split(",") if org.strip()]
+        list(
+            dict.fromkeys(org.strip() for org in org_ids_raw.split(",") if org.strip())
+        )
         if org_ids_raw
         else []
     )
