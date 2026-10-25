@@ -351,8 +351,8 @@ def bw_env(tmp_path_factory):
 
 
 @pytest.fixture(scope="function")
-def bw_session(vaultwarden_container, bw_env):
-    """Create Bitwarden CLI session by logging in."""
+def bw_session(vaultwarden_container, bw_env, monkeypatch):
+    """Create Bitwarden CLI session by logging in and unlocking."""
 
     def handle_error(msg: str):
         if os.getenv("CI"):
@@ -369,40 +369,17 @@ def bw_session(vaultwarden_container, bw_env):
     except Exception as e:
         handle_error(f"No usable test account; provisioning failed: {e}")
 
-    result = subprocess.run(
-        [
-            "bw",
-            "login",
-            TEST_EMAIL,
-            TEST_PASSWORD,
-            "--raw",
-        ],
-        capture_output=True,
-        text=True,
-        env={**bw_env, "BW_SESSION": ""},
-    )
+    for k, v in bw_env.items():
+        monkeypatch.setenv(k, v)
 
-    if result.returncode != 0:
-        handle_error(f"No usable test account; login failed: {result.stderr.strip()}")
+    from src.bw_client import BitwardenClient, BitwardenError
 
-    session = extract_bw_token(result.stdout)
-
-    result = subprocess.run(
-        [
-            "bw",
-            "unlock",
-            TEST_PASSWORD,
-            "--raw",
-        ],
-        capture_output=True,
-        text=True,
-        env={**bw_env, "BW_SESSION": session},
-    )
-
-    if result.returncode != 0:
-        handle_error(f"No usable test account; unlock failed: {result.stderr.strip()}")
-
-    session = extract_bw_token(result.stdout) or session
+    try:
+        client = BitwardenClient()
+        client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
+        session = client.unlock(password=TEST_PASSWORD)
+    except BitwardenError as e:
+        handle_error(f"No usable test account; login/unlock failed: {e}")
 
     bw_env["BW_SESSION"] = session
 
