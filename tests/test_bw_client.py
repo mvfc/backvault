@@ -255,8 +255,22 @@ def test_run_method_json_output(mock_sprun):
     client = BitwardenClient()
     result = client._run(["status"], capture_json=True)
     assert result == {"success": True}
+
+
+@patch("src.bw_client.sprun")
+def test_list_organizations_with_trailing_warning(mock_sprun):
+    """
+    Tests that list_organizations returns valid parsed array even when
+    stdout is followed by a deprecation warning line.
+    """
+    mock_sprun.return_value.stdout = "[]\n(node:1234) DeprecationWarning: punycode"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    result = client.list_organizations()
+    assert result == []
     mock_sprun.assert_called_once_with(
-        ["bw", "status"],
+        ["bw", "list", "organizations"],
         text=True,
         capture_output=True,
         check=True,

@@ -213,18 +213,14 @@ class BitwardenClient:
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
-                candidates = []
+                decoder = json.JSONDecoder()
                 for idx, char in enumerate(output):
                     if char in ("{", "["):
-                        closing = "}" if char == "{" else "]"
-                        end_idx = output.rfind(closing)
-                        if end_idx > idx:
-                            candidates.append((idx, end_idx))
-                for start_idx, end_idx in candidates:
-                    try:
-                        return json.loads(output[start_idx : end_idx + 1])
-                    except json.JSONDecodeError:
-                        continue
+                        try:
+                            val, _ = decoder.raw_decode(output, idx)
+                            return val
+                        except json.JSONDecodeError:
+                            continue
                 logger.error("Failed to parse JSON output")
                 raise BitwardenError("Failed to parse JSON output")
         else:

@@ -54,18 +54,14 @@ def parse_json_output(output: str):
     try:
         return json.loads(output)
     except json.JSONDecodeError:
-        candidates = []
+        decoder = json.JSONDecoder()
         for idx, char in enumerate(output):
             if char in ("{", "["):
-                closing = "}" if char == "{" else "]"
-                end_idx = output.rfind(closing)
-                if end_idx > idx:
-                    candidates.append((idx, end_idx))
-        for start_idx, end_idx in candidates:
-            try:
-                return json.loads(output[start_idx : end_idx + 1])
-            except json.JSONDecodeError:
-                continue
+                try:
+                    val, _ = decoder.raw_decode(output, idx)
+                    return val
+                except json.JSONDecodeError:
+                    continue
         raise
 
 
@@ -296,24 +292,24 @@ def vaultwarden_container():
     )
     created_by_fixture = True
 
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            result = subprocess.run(
-                ["curl", "-sf", f"{VAULTWARDEN_URL}/api/config"],
-                capture_output=True,
-                timeout=2,
-            )
-            if result.returncode == 0:
-                print(f"Vaultwarden ready after {attempt + 1} attempts")
-                break
-        except Exception:
-            pass
-        time.sleep(2)
-    else:
-        pytest.fail("Vaultwarden failed to start")
-
     try:
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            try:
+                result = subprocess.run(
+                    ["curl", "-sf", f"{VAULTWARDEN_URL}/api/config"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    print(f"Vaultwarden ready after {attempt + 1} attempts")
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        else:
+            pytest.fail("Vaultwarden failed to start")
+
         yield container_name
     finally:
         if created_by_fixture:
