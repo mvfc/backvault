@@ -262,7 +262,9 @@ def test_run_method_json_parse_rejects_json_embedded_in_warning_line(mock_sprun)
     """
     Tests that _run with capture_json=True rejects candidate JSON embedded within a warning line.
     """
-    mock_sprun.return_value.stdout = '(node:1234) [DEP0040] DeprecationWarning: punycode {"success": true} is deprecated'
+    mock_sprun.return_value.stdout = (
+        '(node:1234) [DEP0040] DeprecationWarning: punycode {"success": true}'
+    )
     mock_sprun.return_value.stderr = ""
     mock_sprun.return_value.returncode = 0
     client = BitwardenClient()

@@ -922,6 +922,7 @@ def test_run_sh_skips_initial_backup_when_complete_marker_exists(tmp_path):
 
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["DB_PATH"] = str(db_dir)
 
     real_run_sh_path = Path(__file__).parents[1] / "run.sh"
     run_sh_content = real_run_sh_path.read_text()
@@ -942,6 +943,7 @@ def test_run_sh_skips_initial_backup_when_complete_marker_exists(tmp_path):
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
 
     assert "Found successful backup marker" in res.stdout
@@ -980,6 +982,7 @@ def test_run_sh_runs_initial_backup_when_complete_marker_missing(tmp_path):
 
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["DB_PATH"] = str(db_dir)
 
     real_run_sh_path = Path(__file__).parents[1] / "run.sh"
     run_sh_content = real_run_sh_path.read_text()
@@ -1000,6 +1003,7 @@ def test_run_sh_runs_initial_backup_when_complete_marker_missing(tmp_path):
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
 
     assert "Running initial backup..." in res.stdout
