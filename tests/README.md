@@ -48,13 +48,13 @@ docker run -d --name vaultwarden-test \
   vaultwarden/server:latest
 ```
 
-## Wait for it to be ready (~10 seconds)
+#### Wait for it to be ready (~10 seconds)
 
 ```bash
 sleep 10
 ```
 
-## Set environment variables
+#### Set environment variables
 
 ```bash
 export VAULTWARDEN_URL=http://localhost:8080
@@ -62,7 +62,7 @@ export BW_TEST_EMAIL=your-test-email@example.com
 export BW_TEST_PASSWORD=your-test-password
 ```
 
-## Run E2E tests
+#### Run E2E tests
 
 ```bash
 uv run pytest tests/test_e2e.py -v -m e2e

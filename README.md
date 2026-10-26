@@ -96,7 +96,7 @@ Together, these changes make BackVault one of the most secure self-hosted Bitwar
 
 BackVault supports backing up **multiple organizations** from your Bitwarden account. During setup, you can configure:
 
-1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to export all accessible organizations.
+1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to auto-discover all accessible organizations. **Note:** Auto-discovered organizations require export permission; users can configure only organizations they can export.
 2. **Export Mode**: Choose how organizations are exported:
    - **No organization exports (personal vault only)**: Skip organization exports (`none`).
    - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`)

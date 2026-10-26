@@ -320,6 +320,14 @@ def main():
         if org_discovery_failed or org_export_failed:
             return 1
 
+        # Touch explicit success marker file for completion verification
+        success_marker = os.path.join(backup_dir, ".complete")
+        try:
+            with open(success_marker, "w") as f:
+                f.write(timestamp)
+        except Exception as e:
+            logger.warning(f"Failed to create backup success marker file: {e}")
+
         logger.info(f"Export completed successfully to {personal_file}.")
         return 0
     finally:
