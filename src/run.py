@@ -329,8 +329,11 @@ def main():
             logger.error(f"Failed to create backup success marker file: {e}")
             try:
                 os.remove(success_marker)
-            except FileNotFoundError:
-                pass
+            except OSError as cleanup_error:
+                if not isinstance(cleanup_error, FileNotFoundError):
+                    logger.warning(
+                        f"Failed to remove incomplete backup marker: {cleanup_error}"
+                    )
             return 1
 
         logger.info(f"Export completed successfully to {personal_file}.")
