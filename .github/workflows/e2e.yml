@@ -68,15 +68,8 @@ jobs:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
         run: |
           if [ -z "$ADMIN_TOKEN" ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              echo "Warning: ADMIN_TOKEN secret is not set. Skipping optional E2E tests for pull_request."
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Error: ADMIN_TOKEN secret is required for non-PR release runs."
-              exit 1
-            fi
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Error: ADMIN_TOKEN secret is required"
+            exit 1
           fi
 
       - name: Build test image
