@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import subprocess
 import time
 from urllib.error import HTTPError
@@ -57,11 +58,7 @@ def _is_warning_text(text: str) -> bool:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in lines:
         is_node_warn = line.startswith("(") and (")" in line)
-        is_dep_warn = (
-            "DeprecationWarning" in line
-            or "Warning" in line
-            or line.startswith("Warning:")
-        )
+        is_dep_warn = re.match(r"(?:DeprecationWarning|Warning)\b", line)
         is_bracket_warn = (
             line.startswith("[NOTICE]")
             or line.startswith("[WARNING]")

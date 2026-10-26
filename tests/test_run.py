@@ -549,6 +549,54 @@ def test_main_multiple_all_orgs_succeed_returns_zero(
     mock_client_instance.logout.assert_called_once()
 
 
+@pytest.mark.parametrize("failure_stage", ["open", "write", "close"])
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+    clear=True,
+)
+def test_main_success_marker_failure_returns_nonzero(
+    mock_bw_client, mock_get_key, mock_db_connect, failure_stage, caplog
+):
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "",
+        "none",
+    ]
+    with patch("src.run.open") as mock_open:
+        marker = mock_open.return_value
+        failure = OSError("marker unavailable")
+        if failure_stage == "open":
+            mock_open.side_effect = failure
+        elif failure_stage == "write":
+            marker.__enter__.return_value.write.side_effect = failure
+        else:
+            marker.__exit__.side_effect = failure
+
+        with caplog.at_level("INFO"):
+            result = main()
+
+    assert result == 1
+    mock_open.assert_called_once_with("/tmp/.complete", "w")
+    assert (
+        "Failed to create backup success marker file: marker unavailable" in caplog.text
+    )
+    assert "Export completed successfully" not in caplog.text
+    mock_bw_client.return_value.logout.assert_called_once()
+
+
 def test_require_env_missing():
     """
     Tests that require_env raises a RuntimeError for a missing environment variable.

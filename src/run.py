@@ -325,8 +325,9 @@ def main():
         try:
             with open(success_marker, "w") as f:
                 f.write(timestamp)
-        except Exception as e:
-            logger.warning(f"Failed to create backup success marker file: {e}")
+        except OSError as e:
+            logger.error(f"Failed to create backup success marker file: {e}")
+            return 1
 
         logger.info(f"Export completed successfully to {personal_file}.")
         return 0
