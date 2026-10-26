@@ -57,8 +57,10 @@ def _is_warning_text(text: str) -> bool:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in lines:
         is_node_warn = line.startswith("(") and (")" in line)
-        is_dep_warn = line.startswith("DeprecationWarning") or line.startswith(
-            "Warning:"
+        is_dep_warn = (
+            "DeprecationWarning" in line
+            or "Warning" in line
+            or line.startswith("Warning:")
         )
         is_bracket_warn = (
             line.startswith("[NOTICE]")
@@ -78,6 +80,8 @@ def _is_warning_text(text: str) -> bool:
 def parse_json_output(output: str):
     """Parse JSON output from CLI command, handling warning lines in stdout."""
     output = output.strip()
+    if not output:
+        return []
     try:
         return json.loads(output)
     except json.JSONDecodeError:
