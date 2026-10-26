@@ -243,15 +243,7 @@ class BitwardenClient:
                             val, end = decoder.raw_decode(output, idx)
                             prefix = output[:idx]
                             suffix = output[end:]
-                            same_line_prefix = prefix.rpartition("\n")[2]
-                            if (
-                                _is_warning_text(prefix)
-                                and _is_warning_text(suffix)
-                                and not (
-                                    same_line_prefix.strip()
-                                    and _is_warning_text(same_line_prefix)
-                                )
-                            ):
+                            if _is_warning_text(prefix) and _is_warning_text(suffix):
                                 return val
                         except json.JSONDecodeError:
                             continue
