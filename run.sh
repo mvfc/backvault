@@ -77,7 +77,7 @@ EOF
         done
         if [ "$has_enc" -eq 0 ]; then
             echo "No backup files remaining in $BACKUP_DIR; removing stale .complete marker."
-            rm -f "$BACKUP_DIR/.complete"
+            rm -f "$BACKUP_DIR/.complete" || echo "Failed to remove stale .complete marker; continuing..."
         fi
     fi
 
