@@ -66,7 +66,15 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    if [ -f "$BACKUP_DIR/.complete" ] && compgen -G "$BACKUP_DIR/*.enc" > /dev/null; then
+    has_enc=0
+    for f in "$BACKUP_DIR"/*.enc; do
+        if [ -e "$f" ]; then
+            has_enc=1
+            break
+        fi
+    done
+
+    if [ -f "$BACKUP_DIR/.complete" ] && [ "$has_enc" -eq 1 ]; then
         echo "Found successful backup marker and backup files in $BACKUP_DIR, skipping initial backup."
     else
         if [ -f "$BACKUP_DIR/.complete" ]; then
