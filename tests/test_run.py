@@ -889,3 +889,122 @@ def test_main_attachments_disabled(mock_bw_client, mock_get_key, mock_db_connect
     mock_client_instance.export_bitwarden_encrypted.assert_called_once()
     mock_client_instance.download_attachments.assert_not_called()
     mock_client_instance.create_encrypted_archive.assert_not_called()
+
+
+def test_run_sh_skips_initial_backup_when_complete_marker_exists(tmp_path):
+    """
+    Tests that run.sh initial backup logic skips backup when .complete marker exists,
+    even if no .enc files are present. Executes run.sh directly.
+    """
+    import subprocess
+
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    backup_dir = app_dir / "backups"
+    backup_dir.mkdir()
+    (backup_dir / ".complete").write_text("20250101_000000")
+    db_dir = app_dir / "db"
+    db_dir.mkdir()
+    (db_dir / "backvault.db").write_text("dummy db")
+    (app_dir / "logs").mkdir()
+    (app_dir / "src").mkdir()
+    (app_dir / "src" / "run.py").write_text("# dummy")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    supercronic_mock = bin_dir / "supercronic"
+    supercronic_mock.write_text("#!/bin/bash\necho 'SUPERCRONIC_STARTED'\n")
+    supercronic_mock.chmod(0o755)
+
+    python_mock = bin_dir / "python"
+    python_mock.write_text("#!/bin/bash\necho 'PYTHON_CALLED'\nexit 0\n")
+    python_mock.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["DB_PATH"] = str(db_dir)
+
+    real_run_sh_path = Path(__file__).parents[1] / "run.sh"
+    run_sh_content = real_run_sh_path.read_text()
+    run_sh_adapted = (
+        run_sh_content.replace("/app", str(app_dir))
+        .replace("/usr/local/bin/python", str(python_mock))
+        .replace("/usr/local/bin/supercronic", str(supercronic_mock))
+    )
+
+    test_script = tmp_path / "test_run.sh"
+    test_script.write_text(run_sh_adapted)
+    test_script.chmod(0o755)
+
+    res = subprocess.run(
+        [str(test_script)],
+        cwd=str(app_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert "Found successful backup marker" in res.stdout
+    assert "Running initial backup..." not in res.stdout
+    assert "PYTHON_CALLED" not in res.stdout
+
+
+def test_run_sh_runs_initial_backup_when_complete_marker_missing(tmp_path):
+    """
+    Tests that run.sh initial backup logic runs backup when .complete marker is missing,
+    even if existing .enc files created by previous runs exist. Executes run.sh directly.
+    """
+    import subprocess
+
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    backup_dir = app_dir / "backups"
+    backup_dir.mkdir()
+    (backup_dir / "backup_20250101_000000_personal.enc").write_bytes(b"enc data")
+    db_dir = app_dir / "db"
+    db_dir.mkdir()
+    (db_dir / "backvault.db").write_text("dummy db")
+    (app_dir / "logs").mkdir()
+    (app_dir / "src").mkdir()
+    (app_dir / "src" / "run.py").write_text("# dummy")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    supercronic_mock = bin_dir / "supercronic"
+    supercronic_mock.write_text("#!/bin/bash\necho 'SUPERCRONIC_STARTED'\n")
+    supercronic_mock.chmod(0o755)
+
+    python_mock = bin_dir / "python"
+    python_mock.write_text("#!/bin/bash\necho 'PYTHON_CALLED'\nexit 0\n")
+    python_mock.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["DB_PATH"] = str(db_dir)
+
+    real_run_sh_path = Path(__file__).parents[1] / "run.sh"
+    run_sh_content = real_run_sh_path.read_text()
+    run_sh_adapted = (
+        run_sh_content.replace("/app", str(app_dir))
+        .replace("/usr/local/bin/python", str(python_mock))
+        .replace("/usr/local/bin/supercronic", str(supercronic_mock))
+    )
+
+    test_script = tmp_path / "test_run.sh"
+    test_script.write_text(run_sh_adapted)
+    test_script.chmod(0o755)
+
+    res = subprocess.run(
+        [str(test_script)],
+        cwd=str(app_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert "Running initial backup..." in res.stdout
+    assert "PYTHON_CALLED" in res.stdout

@@ -66,21 +66,10 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    has_enc=0
-    for f in "$BACKUP_DIR"/*.enc; do
-        if [ -e "$f" ]; then
-            has_enc=1
-            break
-        fi
-    done
 
-    if [ -f "$BACKUP_DIR/.complete" ] && [ "$has_enc" -eq 1 ]; then
-        echo "Found successful backup marker and backup files in $BACKUP_DIR, skipping initial backup."
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
     else
-        if [ -f "$BACKUP_DIR/.complete" ]; then
-            echo "Backup marker found but no backup files present in $BACKUP_DIR; clearing stale marker."
-            rm -f "$BACKUP_DIR/.complete"
-        fi
         echo "Running initial backup..."
         ./run_wrapper.sh || echo "Initial backup failed; scheduler will retry at next interval."
     fi
