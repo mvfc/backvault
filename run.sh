@@ -66,8 +66,8 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
-        echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
     else
         echo "Running initial backup..."
         ./run_wrapper.sh || echo "Initial backup failed; scheduler will retry at next interval."

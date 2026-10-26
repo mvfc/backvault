@@ -58,6 +58,14 @@ def init(
     if org_export_mode not in ("single", "multiple", "none"):
         org_export_mode = "multiple"
 
+    encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+    if org_export_mode == "single" and encryption_mode != "raw":
+        conn.close()
+        return HTMLResponse(
+            "org_export_mode 'single' is only supported when BACKUP_ENCRYPTION_MODE is 'raw'.",
+            status_code=400,
+        )
+
     # Store encrypted passwords and keys
     put_key(conn, "master_password", master_password.encode())
     put_key(conn, "client_id", client_id.encode())

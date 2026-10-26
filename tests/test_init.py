@@ -26,6 +26,56 @@ def test_index():
 
 @patch("src.init.db_connect")
 @patch("src.init.put_key")
+def test_init_single_org_export_mode_rejected_when_not_raw(
+    mock_put_key, mock_db_connect
+):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_db_connect.return_value = (mock_conn, mock_cursor)
+
+    with patch.dict("os.environ", {"BACKUP_ENCRYPTION_MODE": "bitwarden"}):
+        response = client.post(
+            "/init",
+            data={
+                "master_password": "test_master_password",
+                "client_id": "test_client_id",
+                "client_secret": "test_client_secret",
+                "file_password": "test_file_password",
+                "org_export_mode": "single",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "org_export_mode 'single' is only supported" in response.text
+    mock_conn.close.assert_called_once()
+
+
+@patch("src.init.db_connect")
+@patch("src.init.put_key")
+def test_init_single_org_export_mode_allowed_when_raw(mock_put_key, mock_db_connect):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_db_connect.return_value = (mock_conn, mock_cursor)
+
+    with patch.dict("os.environ", {"BACKUP_ENCRYPTION_MODE": "RAW"}):
+        response = client.post(
+            "/init",
+            data={
+                "master_password": "test_master_password",
+                "client_id": "test_client_id",
+                "client_secret": "test_client_secret",
+                "file_password": "test_file_password",
+                "org_export_mode": "single",
+            },
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/done"
+
+
+@patch("src.init.db_connect")
+@patch("src.init.put_key")
 def test_init(mock_put_key, mock_db_connect):
     """
     Tests the /init endpoint.

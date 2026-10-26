@@ -64,10 +64,10 @@ for platform in "${PLATFORMS[@]}"; do
         "${IMAGE_NAME}:${platform_tag}-test" \
         python3 --version
 
-    echo "Testing sqlcipher --version..."
-    docker run --rm --platform "$platform" \
+    echo "Testing sqlcipher availability..."
+    docker run --rm --entrypoint sh --platform "$platform" \
         "${IMAGE_NAME}:${platform_tag}-test" \
-        sqlcipher --version || echo "Note: sqlcipher may not have --version"
+        -c 'command -v sqlcipher'
 
     echo "Testing entrypoint.sh exists and is executable..."
     docker run --rm --platform "$platform" \
@@ -90,9 +90,9 @@ for platform in "${PLATFORMS[@]}"; do
         sh -c 'test -d /app/backups && test -d /app/db && test -d /app/logs'
 
     echo "Testing environment variables..."
-    docker run --rm --platform "$platform" \
+    docker run --rm --entrypoint sh --platform "$platform" \
         "${IMAGE_NAME}:${platform_tag}-test" \
-        printenv | grep -q PYTHONPATH || echo "Note: PYTHONPATH may not be set in test"
+        -c '[ "$PYTHONPATH" = "/app" ]'
 
     echo "=== $platform: All tests passed ==="
     echo ""
