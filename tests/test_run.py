@@ -889,3 +889,47 @@ def test_main_attachments_disabled(mock_bw_client, mock_get_key, mock_db_connect
     mock_client_instance.export_bitwarden_encrypted.assert_called_once()
     mock_client_instance.download_attachments.assert_not_called()
     mock_client_instance.create_encrypted_archive.assert_not_called()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
+def test_main_clears_preexisting_complete_marker_on_start_and_failure(
+    mock_bw_client, mock_get_key, mock_db_connect
+):
+    """
+    Tests that main clears any existing .complete marker on start and leaves it absent if backup fails.
+    """
+    marker_file = Path("/tmp/.complete")
+    marker_file.write_text("old_timestamp")
+
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "id",
+        "secret",
+        "master",
+        "file_pw",
+        "org-1",
+        "multiple",
+    ]
+    mock_client_instance = mock_bw_client.return_value
+    mock_client_instance.export_organization_bitwarden.side_effect = Exception(
+        "Org export failed"
+    )
+
+    try:
+        result = main()
+
+        assert result == 1
+        assert not marker_file.exists()
+    finally:
+        marker_file.unlink(missing_ok=True)

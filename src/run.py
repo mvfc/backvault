@@ -101,6 +101,12 @@ def main():
         logger.addHandler(logging.FileHandler(log_file))
 
     os.makedirs(backup_dir, exist_ok=True)
+    success_marker = os.path.join(backup_dir, ".complete")
+    try:
+        if os.path.exists(success_marker):
+            os.remove(success_marker)
+    except OSError as e:
+        logger.warning(f"Failed to clear pre-existing backup success marker file: {e}")
 
     # Create client
     logger.info("Connecting to vault...")

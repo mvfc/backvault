@@ -66,19 +66,31 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    has_enc=0
-    for f in "$BACKUP_DIR"/*.enc; do
-        if [ -e "$f" ]; then
-            has_enc=1
-            break
+    has_valid_backup=0
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        marker_ts=$(tr -d '[:space:]' < "$BACKUP_DIR/.complete" 2>/dev/null || true)
+        if [ -n "$marker_ts" ]; then
+            for f in "$BACKUP_DIR"/backup_"${marker_ts}"*.enc; do
+                if [ -e "$f" ]; then
+                    has_valid_backup=1
+                    break
+                fi
+            done
+        else
+            for f in "$BACKUP_DIR"/*.enc; do
+                if [ -e "$f" ]; then
+                    has_valid_backup=1
+                    break
+                fi
+            done
         fi
-    done
+    fi
 
-    if [ -f "$BACKUP_DIR/.complete" ] && [ "$has_enc" -eq 1 ]; then
-        echo "Found successful backup marker and backup files in $BACKUP_DIR, skipping initial backup."
+    if [ "$has_valid_backup" -eq 1 ]; then
+        echo "Found successful backup marker and matching backup files in $BACKUP_DIR, skipping initial backup."
     else
         if [ -f "$BACKUP_DIR/.complete" ]; then
-            echo "Backup marker found but no backup files present in $BACKUP_DIR; clearing stale marker."
+            echo "Backup marker found but no matching backup files present in $BACKUP_DIR; clearing stale marker."
             rm -f "$BACKUP_DIR/.complete"
         fi
         echo "Running initial backup..."
