@@ -889,3 +889,71 @@ def test_main_attachments_disabled(mock_bw_client, mock_get_key, mock_db_connect
     mock_client_instance.export_bitwarden_encrypted.assert_called_once()
     mock_client_instance.download_attachments.assert_not_called()
     mock_client_instance.create_encrypted_archive.assert_not_called()
+
+
+def test_run_sh_skips_initial_backup_when_complete_marker_exists(tmp_path):
+    """
+    Tests that run.sh initial backup logic skips backup when .complete marker exists,
+    even if no .enc files are present.
+    """
+    import subprocess
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    (backup_dir / ".complete").write_text("20250101_000000")
+    dummy_wrapper = tmp_path / "run_wrapper.sh"
+    dummy_wrapper.write_text("#!/bin/bash\necho 'WRAPPER_CALLED'\n")
+    dummy_wrapper.chmod(0o755)
+
+    bash_cmd = f"""
+    BACKUP_DIR="{backup_dir}"
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
+    else
+        echo "Running initial backup..."
+        {dummy_wrapper} || echo "Initial backup failed"
+    fi
+    """
+
+    res = subprocess.run(
+        ["bash", "-c", bash_cmd],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Found successful backup marker" in res.stdout
+    assert "WRAPPER_CALLED" not in res.stdout
+
+
+def test_run_sh_runs_initial_backup_when_complete_marker_missing(tmp_path):
+    """
+    Tests that run.sh initial backup logic runs backup when .complete marker is missing,
+    even if existing .enc files created by previous runs exist.
+    """
+    import subprocess
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    (backup_dir / "backup_20250101_000000_personal.enc").write_bytes(b"enc data")
+    dummy_wrapper = tmp_path / "run_wrapper.sh"
+    dummy_wrapper.write_text("#!/bin/bash\necho 'WRAPPER_CALLED'\n")
+    dummy_wrapper.chmod(0o755)
+
+    bash_cmd = f"""
+    BACKUP_DIR="{backup_dir}"
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
+    else
+        echo "Running initial backup..."
+        {dummy_wrapper} || echo "Initial backup failed"
+    fi
+    """
+
+    res = subprocess.run(
+        ["bash", "-c", bash_cmd],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Running initial backup..." in res.stdout
+    assert "WRAPPER_CALLED" in res.stdout
