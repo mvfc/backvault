@@ -68,6 +68,20 @@ EOF
     BACKUP_DIR="/app/backups"
 
     if [ -f "$BACKUP_DIR/.complete" ]; then
+        has_enc=0
+        for f in "$BACKUP_DIR"/*.enc; do
+            if [ -e "$f" ]; then
+                has_enc=1
+                break
+            fi
+        done
+        if [ "$has_enc" -eq 0 ]; then
+            echo "No backup files remaining in $BACKUP_DIR; removing stale .complete marker."
+            rm -f "$BACKUP_DIR/.complete"
+        fi
+    fi
+
+    if [ -f "$BACKUP_DIR/.complete" ]; then
         echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
     else
         echo "Running initial backup..."
