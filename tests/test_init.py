@@ -47,7 +47,7 @@ def test_init_single_org_export_mode_rejected_when_not_raw(
 
     assert response.status_code == 400
     assert "org_export_mode 'single' is only supported" in response.text
-    mock_conn.close.assert_called_once()
+    mock_db_connect.assert_not_called()
 
 
 @patch("src.init.db_connect")

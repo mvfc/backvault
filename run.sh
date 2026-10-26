@@ -66,9 +66,13 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    if [ -f "$BACKUP_DIR/.complete" ]; then
-        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
+    if [ -f "$BACKUP_DIR/.complete" ] && compgen -G "$BACKUP_DIR/*.enc" > /dev/null; then
+        echo "Found successful backup marker and backup files in $BACKUP_DIR, skipping initial backup."
     else
+        if [ -f "$BACKUP_DIR/.complete" ]; then
+            echo "Backup marker found but no backup files present in $BACKUP_DIR; clearing stale marker."
+            rm -f "$BACKUP_DIR/.complete"
+        fi
         echo "Running initial backup..."
         ./run_wrapper.sh || echo "Initial backup failed; scheduler will retry at next interval."
     fi

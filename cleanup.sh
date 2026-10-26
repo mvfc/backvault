@@ -22,4 +22,10 @@ echo "INFO: Starting cleanup of backups older than $RETAIN_DAYS days in $BACKUP_
 # We use RETAIN_DAYS directly. For example, if RETAIN_DAYS=7, files older than 7 days will be deleted.
 find "$BACKUP_DIR" -type f \( -name "*.enc" -o -name "*_attachments.7z" \) -mtime "+$RETAIN_DAYS" -print -delete -xdev -maxdepth 1
 
+# If no .enc backup files remain, remove .complete success marker to prevent stale status
+if [ -f "$BACKUP_DIR/.complete" ] && ! compgen -G "$BACKUP_DIR/*.enc" > /dev/null; then
+  echo "INFO: No backup files remaining in $BACKUP_DIR; removing stale .complete marker."
+  rm -f "$BACKUP_DIR/.complete"
+fi
+
 echo "INFO: Cleanup finished."
