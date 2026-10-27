@@ -47,7 +47,20 @@ def init(
     client_id: str = Form(...),
     client_secret: str = Form(...),
     file_password: str = Form(...),
+    organization_ids: str = Form(""),
+    org_export_mode: str = Form("multiple"),
 ):
+    # Validate org_export_mode against allowlist
+    if org_export_mode not in ("single", "multiple", "none"):
+        org_export_mode = "multiple"
+
+    encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+    if org_export_mode == "single" and encryption_mode != "raw":
+        return HTMLResponse(
+            "org_export_mode 'single' is only supported when BACKUP_ENCRYPTION_MODE is 'raw'.",
+            status_code=400,
+        )
+
     conn, cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
     if not conn or not cursor:
         return HTMLResponse("Database connection failed", status_code=500)
@@ -57,6 +70,8 @@ def init(
     put_key(conn, "client_id", client_id.encode())
     put_key(conn, "client_secret", client_secret.encode())
     put_key(conn, "file_password", file_password.encode())
+    put_key(conn, "organization_ids", organization_ids.encode())
+    put_key(conn, "org_export_mode", org_export_mode.encode())
 
     conn.close()
 

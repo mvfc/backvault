@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from subprocess import CalledProcessError, run as sprun
 import json
@@ -41,6 +42,29 @@ def _safe_error(e: Exception) -> str:
     return str(e)
 
 
+def _is_warning_text(text: str) -> bool:
+    """Return True if text consists only of whitespace or recognized anchored runtime/deprecation warning lines."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        is_node_warn = line.startswith("(") and (")" in line)
+        is_dep_warn = line.startswith("DeprecationWarning") or line.startswith(
+            "Warning:"
+        )
+        is_bracket_warn = (
+            line.startswith("[NOTICE]")
+            or line.startswith("[WARNING]")
+            or line.startswith("[ERROR]")
+            or line.startswith("[DEP")
+            or line.startswith("[node")
+        )
+        is_data_msg = line.startswith("Could not find") or line.startswith(
+            "Saved setting"
+        )
+        if not (is_node_warn or is_dep_warn or is_bracket_warn or is_data_msg):
+            return False
+    return True
+
+
 class BitwardenClient:
     def __init__(
         self,
@@ -77,6 +101,7 @@ class BitwardenClient:
         if server:
             logger.debug(f"Configuring BW server: {server}")
             env = os.environ.copy()  # do not add BW_SESSION
+            env["BW_NOINTERACTION"] = "true"
             try:
                 sprun(
                     [self.bw_cmd, "config", "server", server],
@@ -121,9 +146,7 @@ class BitwardenClient:
                 if env.get(key):
                     secrets.add(env[key])
         redacted = text
-        for secret in sorted(
-            (s for s in secrets if s), key=len, reverse=True
-        ):
+        for secret in sorted((s for s in secrets if s), key=len, reverse=True):
             if secret in redacted:
                 redacted = redacted.replace(secret, "[REDACTED]")
         return redacted
@@ -135,13 +158,17 @@ class BitwardenClient:
         text: bool = True,
         capture_output: bool = True,
         check: bool = True,
-        env=os.environ.copy(),
+        env: dict | None = None,
+        logout_on_error: bool = True,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         """
+        if env is None:
+            env = os.environ.copy()
+        env["BW_NOINTERACTION"] = "true"
         if self.session:
             env["BW_SESSION"] = self.session
         full_cmd = [self.bw_cmd] + cmd
@@ -183,19 +210,20 @@ class BitwardenClient:
             if isinstance(e, CalledProcessError) and e.stderr:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
             logger.error(f"Failed to run command: {masked_e}")
-            try:
-                sprun(
-                    [self.bw_cmd, "logout"],
-                    text=text,
-                    capture_output=capture_output,
-                    check=True,
-                    env=env,
-                )
-            except Exception as inner_e:
-                logger.error(
-                    f"Failed to log out after error. Failure: "
-                    f"{self._redact_text(_safe_error(inner_e), env)}"
-                )
+            if logout_on_error:
+                try:
+                    sprun(
+                        [self.bw_cmd, "logout"],
+                        text=text,
+                        capture_output=capture_output,
+                        check=True,
+                        env=env,
+                    )
+                except Exception as inner_e:
+                    logger.error(
+                        f"Failed to log out after error. Failure: "
+                        f"{self._redact_text(_safe_error(inner_e), env)}"
+                    )
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -208,6 +236,25 @@ class BitwardenClient:
             try:
                 return json.loads(output)
             except json.JSONDecodeError:
+                decoder = json.JSONDecoder()
+                for idx, char in enumerate(output):
+                    if char in ("{", "["):
+                        try:
+                            val, end = decoder.raw_decode(output, idx)
+                            prefix = output[:idx]
+                            suffix = output[end:]
+                            same_line_prefix = prefix.rpartition("\n")[2]
+                            if (
+                                _is_warning_text(prefix)
+                                and _is_warning_text(suffix)
+                                and not (
+                                    same_line_prefix.strip()
+                                    and _is_warning_text(same_line_prefix)
+                                )
+                            ):
+                                return val
+                        except json.JSONDecodeError:
+                            continue
                 logger.error("Failed to parse JSON output")
                 raise BitwardenError("Failed to parse JSON output")
         else:
@@ -280,9 +327,7 @@ class BitwardenClient:
                 cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(
-                cmd, capture_json=False, env=env
-            )
+            self.session = self._run(cmd, capture_json=False, env=env)
             logger.info("Logged in successfully")
 
         return self.session
@@ -301,7 +346,8 @@ class BitwardenClient:
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
 
-        self.session = result
+        if result:
+            self.session = result
         logger.info("Vault unlocked successfully")
         return self.session
 
@@ -367,3 +413,119 @@ class BitwardenClient:
         )
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
+
+    def list_organizations(self) -> list[dict[str, Any]]:
+        """List all organizations the user has access to."""
+        logger.info("Fetching organization list...")
+        return self._run(["list", "organizations"], logout_on_error=False)
+
+    def export_organization_raw(self, org_id: str) -> dict[str, Any]:
+        """Export organization vault as raw JSON."""
+        logger.info(f"Exporting organization vault: {org_id}")
+        return self._run(
+            cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
+            capture_json=True,
+            logout_on_error=False,
+        )
+
+    def export_organization_bitwarden(
+        self, backup_file: str, file_pw: str, org_id: str
+    ):
+        """Export organization vault using Bitwarden's built-in encryption."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
+        logger.info(f"Exporting organization {org_id} with Bitwarden encryption...")
+        self._run(
+            cmd=[
+                "export",
+                "--organizationid",
+                org_id,
+                "--output",
+                backup_file,
+                "--format",
+                "encrypted_json",
+                "--password",
+                file_pw,
+            ],
+            capture_json=False,
+            logout_on_error=False,
+        )
+
+    def export_organization_raw_encrypted(
+        self, backup_file: str, file_pw: str, org_id: str
+    ):
+        """Export organization vault and encrypt it in-memory."""
+        try:
+            backup_file = validate_path(backup_file, "/app")
+        except BitwardenError as e:
+            logger.error(f"Invalid backup file path: {e}")
+            raise
+        logger.info(f"Exporting organization {org_id} with raw encryption...")
+        raw_json = self.export_organization_raw(org_id)
+        encrypted_data = self.encrypt_data(
+            json.dumps(raw_json).encode("utf-8"), file_pw
+        )
+        with open(backup_file, "wb") as f:
+            f.write(encrypted_data)
+
+    def list_items_with_attachments(self) -> list[dict[str, Any]]:
+        """Return vault items that have at least one attachment."""
+        items = self._run(cmd=["list", "items"], capture_json=True)
+        return [i for i in items if i.get("attachments")]
+
+    def download_attachments(self, dest_dir: str) -> int:
+        """
+        Download all attachments into dest_dir/<item id>/<file name>.
+        Returns the number of downloaded files.
+        """
+        count = 0
+        for item in self.list_items_with_attachments():
+            item_id = item["id"]
+            if not re.fullmatch(r"[A-Za-z0-9-]+", str(item_id)):
+                logger.warning("Skipping item with unexpected id format")
+                continue
+            item_dir = os.path.join(dest_dir, item_id)
+            os.makedirs(item_dir, exist_ok=True)
+            used: set[str] = set()
+            for att in item["attachments"]:
+                name = os.path.basename(str(att.get("fileName") or "")).strip()
+                if name in ("", ".", ".."):
+                    name = "attachment"
+                if name in used:
+                    stem, ext = os.path.splitext(name)
+                    i = 1
+                    while f"{stem}_{i}{ext}" in used:
+                        i += 1
+                    name = f"{stem}_{i}{ext}"
+                self._run(
+                    cmd=[
+                        "get",
+                        "attachment",
+                        att["id"],
+                        "--itemid",
+                        item_id,
+                        "--output",
+                        os.path.join(item_dir, name),
+                    ],
+                    capture_json=False,
+                )
+                used.add(name)
+                count += 1
+        logger.info(f"Downloaded {count} attachment(s).")
+        return count
+
+    def create_encrypted_archive(
+        self, src_dir: str, archive_path: str, password: str
+    ) -> None:
+        """Create a password-protected 7z archive of src_dir's contents."""
+        import py7zr
+
+        with py7zr.SevenZipFile(
+            archive_path, "w", password=password, header_encryption=True
+        ) as archive:
+            for name in os.listdir(src_dir):
+                archive.writeall(os.path.join(src_dir, name), arcname=name)
+        logger.info(f"Attachments archive created at {archive_path}.")

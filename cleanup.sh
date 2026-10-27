@@ -1,5 +1,5 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 
 # cleanup.sh - Deletes old backup files based on a retention policy.
 
@@ -20,6 +20,21 @@ echo "INFO: Starting cleanup of backups older than $RETAIN_DAYS days in $BACKUP_
 # Use find to delete files.
 # -mtime +N means files modified more than N*24 hours ago.
 # We use RETAIN_DAYS directly. For example, if RETAIN_DAYS=7, files older than 7 days will be deleted.
-find "$BACKUP_DIR" -type f -name "*.enc" -mtime "+$RETAIN_DAYS" -print -delete -xdev -maxdepth 1
+find "$BACKUP_DIR" -type f \( -name "*.enc" -o -name "*_attachments.7z" \) -mtime "+$RETAIN_DAYS" -print -delete -xdev -maxdepth 1
+
+# If no .enc backup files remain, remove .complete success marker to prevent stale status
+if [ -f "$BACKUP_DIR/.complete" ]; then
+  has_enc=0
+  for f in "$BACKUP_DIR"/*.enc; do
+    if [ -e "$f" ]; then
+      has_enc=1
+      break
+    fi
+  done
+  if [ "$has_enc" -eq 0 ]; then
+    echo "INFO: No backup files remaining in $BACKUP_DIR; removing stale .complete marker."
+    rm -f "$BACKUP_DIR/.complete"
+  fi
+fi
 
 echo "INFO: Cleanup finished."
