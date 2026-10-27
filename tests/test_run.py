@@ -1071,6 +1071,7 @@ def test_run_sh_continues_to_supercronic_when_initial_backup_fails(tmp_path):
     )
 
     assert "Running initial backup..." in res.stdout
+    assert "PYTHON_FAILED" in res.stdout
     assert "Initial backup failed; scheduler will retry at next interval." in res.stdout
     assert "Starting supercronic scheduler..." in res.stdout
     assert "SUPERCRONIC_STARTED" in res.stdout
