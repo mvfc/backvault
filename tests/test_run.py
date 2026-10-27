@@ -1147,6 +1147,8 @@ def test_run_sh_handles_marker_removal_failure_gracefully(tmp_path):
     )
 
     assert "Failed to remove stale .complete marker" in res.stdout
+    assert "Running initial backup..." in res.stdout
+    assert "skipping initial backup" not in res.stdout
     assert "Starting supercronic scheduler..." in res.stdout
 
 
