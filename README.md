@@ -395,7 +395,7 @@ KeePassXC natively supports importing Bitwarden JSON exports:
 
 1. Obtain unencrypted JSON depending on your backup encryption mode:
    - **`raw` mode**: Decrypt the `.enc` file using `decrypt.py` (or extract individual organization JSONs using `extract_orgs.py` for combined org backups).
-   - **`bitwarden` mode**: Decrypt and export to unencrypted JSON using Bitwarden CLI (`bw import bitwardenjson /path/to/backup.enc` followed by `bw export --format json`), or import the encrypted JSON file directly into KeePassXC if supported by your KeePassXC version. **Warning:** `bw import` adds items to the currently logged-in vault and `bw export` exports all items in that vault (including any pre-existing items), so perform this conversion in an empty Bitwarden account or isolated vault.
+   - **`bitwarden` mode**: Decrypt and export to unencrypted JSON using Bitwarden CLI (`bw import bitwardenjson /path/to/backup.enc` followed by `bw export --format json`), or import the encrypted JSON file directly into KeePassXC if supported by your KeePassXC version. Run the import in an empty Bitwarden account or isolated vault. `bw import` adds the backup items to the logged-in vault, and `bw export` then includes the existing items too.
 2. Open KeePassXC and go to **Database** > **Import** > **Bitwarden (JSON)...**
 3. Select the unencrypted `.json` file to import your items and folder structure. Note that attachments are not restored by the JSON import; extract `*_attachments.7z` separately and attach the files to entries in KeePassXC as needed.
 
