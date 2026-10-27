@@ -388,6 +388,9 @@ def bw_session(vaultwarden_container, bw_env, monkeypatch):
     session = extract_bw_token(session) or session
     bw_env["BW_SESSION"] = session
 
+    # Run initial sync so the local vault data cache is populated
+    subprocess.run(["bw", "sync"], capture_output=True, env=bw_env)
+
     yield {"session": session, "bw_env": bw_env}
 
     subprocess.run(["bw", "lock"], capture_output=True, env=bw_env)
