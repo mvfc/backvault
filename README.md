@@ -313,9 +313,11 @@ Once extracted, each folder name corresponds to an item's unique `id` in your de
 * **Restoring to Bitwarden / Vaultwarden**:
   * **Web UI**: Open the corresponding item in your Web Vault, click **Edit**, scroll to the **Attachments** section, and upload the recovered file(s).
   * **Bitwarden CLI**: Use the Bitwarden CLI to upload attachments directly to an item:
+
     ```bash
     bw create attachment --file ./attachments/<item-id>/document.pdf --itemid <item-id>
     ```
+
     > *Note:* If you imported your vault JSON into a new account or instance, items will have new IDs. Look up the item name in your decrypted JSON export to find the matching folder in `attachments/`, then pass the new item ID to `bw create attachment`.
 
 * **Restoring to KeePass / KeePassXC**:
@@ -334,14 +336,18 @@ Depending on your configured export mode and encryption mode, follow the corresp
 #### 1. Separate Organization Files (`backup_*_org-<id>.enc`)
 
 * **`bitwarden` encryption mode**:
-  * **Web Vault**: Log into your Bitwarden or Vaultwarden Web UI -> Select your Organization -> Go to **Settings** > **Import Data** -> Choose format **Bitwarden (encrypted JSON)** -> Upload the `.enc` file and enter your backup password.
+  * **Bitwarden Web Vault**: Log into Web Vault -> Open **Admin Console** for your Organization -> Go to **Settings** > **Import Data** -> Choose format **Bitwarden (JSON)** (the importer automatically detects encrypted JSON files) -> Select file and enter backup password.
+  * **Vaultwarden Web Vault**: Log into Vaultwarden Web Vault -> Select Organization -> Go to **Settings** > **Import Data** -> Choose format **Bitwarden (encrypted JSON)** or **Bitwarden (JSON)** -> Select file and enter password.
   * **Bitwarden CLI**:
+
     ```bash
     bw import bitwardenjson /path/to/backup_timestamp_org-id.enc --organizationid <target-org-id>
     ```
+
 * **`raw` encryption mode**:
   1. Decrypt the file using `decrypt.py` (see above) to obtain `backup_*_org-<id>.json`.
   2. Import into Web UI (Select format: **Bitwarden (JSON)**) or via CLI:
+
      ```bash
      bw import bitwardenjson /path/to/backup_timestamp_org-id.json --organizationid <target-org-id>
      ```
@@ -371,6 +377,7 @@ To restore individual organizations:
            json.dump(org_data, f_out, indent=2)
        print(f"Extracted {filename}")
    ```
+
    Run: `python extract_orgs.py backup_20250101_120000_orgs.json`
 
 3. Import each extracted `org_<org-id>.json` into your target organization via the Web Vault (format: **Bitwarden (JSON)**) or Bitwarden CLI (`bw import bitwardenjson org_<org-id>.json --organizationid <target-org-id>`).
@@ -382,20 +389,27 @@ To restore individual organizations:
 If you need to migrate your backups to another password manager such as **KeePassXC**, **1Password**, or generic CSV-compatible applications:
 
 #### Option A: Direct Import into KeePassXC (Recommended)
-KeePassXC natively supports importing unencrypted Bitwarden JSON files without any conversion:
-1. Decrypt your backup file (`.enc`) using `decrypt.py` (or extract individual organization JSONs using `extract_orgs.py` if using combined org backups).
-2. Open KeePassXC and go to **Database** > **Import** > **Bitwarden (JSON)...**
-3. Select the decrypted `.json` file. KeePassXC will parse and import all items, folders, attachments, and custom fields into your KeePass database.
 
-#### Option B: Converting Bitwarden JSON to Standard Bitwarden CSV
-For password managers that require CSV format, use this script to convert any decrypted Bitwarden vault JSON (personal or organization) into standard Bitwarden CSV:
+KeePassXC natively supports importing Bitwarden JSON exports:
+
+1. Obtain unencrypted JSON depending on your backup encryption mode:
+   - **`raw` mode**: Decrypt the `.enc` file using `decrypt.py` (or extract individual organization JSONs using `extract_orgs.py` for combined org backups).
+   - **`bitwarden` mode**: Decrypt and export to unencrypted JSON using Bitwarden CLI (`bw import bitwardenjson /path/to/backup.enc` followed by `bw export --format json`), or import the encrypted JSON file directly into KeePassXC if supported by your KeePassXC version.
+2. Open KeePassXC and go to **Database** > **Import** > **Bitwarden (JSON)...**
+3. Select the unencrypted `.json` file to import your items and folder structure. Note that attachments are not restored by the JSON import; extract `*_attachments.7z` separately and attach the files to entries in KeePassXC as needed.
+
+#### Option B: Converting Personal Bitwarden JSON to Standard Bitwarden CSV
+
+For password managers that require CSV format, use this script to convert a decrypted personal Bitwarden vault JSON into standard Bitwarden personal CSV.
+
+> **Note:** Bitwarden's standard personal CSV format only supports `login` and `note` items. Credit cards, identities, and attachments cannot be fully represented in CSV format without losing sensitive fields. This script processes `login` and `note` items, preserves item `reprompt` settings, and skips/reports card or identity items so data is not silently omitted. For full preservation of all item types, use Bitwarden JSON import/export.
 
 ```python
 # bitwarden_to_csv.py
 import json, csv, sys
 
 if len(sys.argv) < 2:
-    print(f"Usage: python {sys.argv[0]} <decrypted_vault.json> [output.csv]")
+    print(f"Usage: python {sys.argv[0]} <decrypted_personal_vault.json> [output.csv]")
     sys.exit(1)
 
 json_file = sys.argv[1]
@@ -409,24 +423,33 @@ folders = {f['id']: f['name'] for f in data.get('folders', [])}
 
 headers = ['folder', 'favorite', 'type', 'name', 'notes', 'fields', 'reprompt', 'login_uri', 'login_username', 'login_password', 'login_totp']
 
+skipped_items = []
+converted_count = 0
+
 with open(csv_file, 'w', newline='', encoding='utf-8') as f:
     writer = csv.writer(f)
     writer.writerow(headers)
 
     for item in items:
+        item_type = item.get('type', 1)
+        name = item.get('name', 'Unnamed Item')
+
+        # 1: login, 2: note
+        if item_type not in (1, 2):
+            type_label = 'card' if item_type == 3 else ('identity' if item_type == 4 else f'unknown ({item_type})')
+            skipped_items.append(f"'{name}' (type: {type_label})")
+            continue
+
+        type_str = 'login' if item_type == 1 else 'note'
         folder_name = folders.get(item.get('folderId'), '')
         favorite = '1' if item.get('favorite') else '0'
-        item_type = item.get('type', 1)
-
-        type_str = 'login' if item_type == 1 else ('note' if item_type == 2 else ('card' if item_type == 3 else 'identity'))
-
-        name = item.get('name', '')
         notes = item.get('notes', '')
 
-        fields_list = [f"{field.get('name', '')}: {field.get('value', '')}" for field in item.get('fields', [])]
+        fields_list = [f"{field.get('name', '')}: {field.get('value', '')}" for field in item.get('fields', []) if field.get('name') or field.get('value')]
         fields_str = '\n'.join(fields_list)
 
-        reprompt = '0'
+        reprompt_val = item.get('reprompt')
+        reprompt_str = str(reprompt_val) if reprompt_val is not None else '0'
 
         login = item.get('login') or {}
         uris = login.get('uris') or []
@@ -435,12 +458,17 @@ with open(csv_file, 'w', newline='', encoding='utf-8') as f:
         password = login.get('password', '')
         totp = login.get('totp', '')
 
-        writer.writerow([folder_name, favorite, type_str, name, notes, fields_str, reprompt, login_uri, username, password, totp])
+        writer.writerow([folder_name, favorite, type_str, name, notes, fields_str, reprompt_str, login_uri, username, password, totp])
+        converted_count += 1
 
-print(f"Successfully converted {json_file} to {csv_file}")
+print(f"Successfully converted {converted_count} item(s) to {csv_file}")
+if skipped_items:
+    print(f"Warning: Skipped {len(skipped_items)} item(s) not supported by standard CSV format:\n  " + "\n  ".join(skipped_items), file=sys.stderr)
+    print("Tip: Use standard Bitwarden JSON format to import/export credit cards and identity items without data loss.", file=sys.stderr)
 ```
 
 Run:
+
 ```bash
 python bitwarden_to_csv.py backup_20250101_120000.json output.csv
 ```
