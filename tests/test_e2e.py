@@ -389,7 +389,9 @@ def bw_session(vaultwarden_container, bw_env, monkeypatch):
     bw_env["BW_SESSION"] = session
 
     # Run initial sync so the local vault data cache is populated
-    subprocess.run(["bw", "sync"], capture_output=True, env=bw_env)
+    sync_result = subprocess.run(["bw", "sync"], capture_output=True, text=True, env=bw_env)
+    if sync_result.returncode != 0:
+        handle_error(f"bw sync failed with exit code {sync_result.returncode}: {sync_result.stderr.strip()}")
 
     yield {"session": session, "bw_env": bw_env}
 
