@@ -380,9 +380,8 @@ def bw_session(vaultwarden_container, bw_env, monkeypatch):
 
     try:
         client = BitwardenClient()
-        session = client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
-        if not session:
-            session = client.unlock(password=TEST_PASSWORD)
+        client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
+        session = client.unlock(password=TEST_PASSWORD)
     except BitwardenError as e:
         handle_error(f"No usable test account; login/unlock failed: {e}")
 
