@@ -318,7 +318,7 @@ Once extracted, each folder name corresponds to an item's unique `id` in your de
     bw create attachment --file ./attachments/<item-id>/document.pdf --itemid <item-id>
     ```
 
-    > *Note:* If you imported your vault JSON into a new account or instance, items will receive new IDs. To find an item's original `id` (which matches the `attachments/<original-id>/` folder name), look up the item using identifying fields (such as `name`, `login.username`, `login.uris`, or `type`): check your decrypted personal vault JSON export (`backup_*_personal.json` or `backup_*.json`) for personal items (`organizationId: null`), or the matching decrypted organization JSON export (`backup_*_org-<id>.json` or `org_<id>.json`) for organization-owned items (`organizationId` set). In `bitwarden` encryption mode (where `.enc` backups are imported directly without first producing a plaintext JSON file), record an old-to-new item mapping before/during migration or import the backup into an empty temporary vault/organization and run `bw list items` (or `bw export --format json`) to inspect item details, then pass the target item's new ID to `bw create attachment`.
+    > *Note:* If you imported your vault JSON into a new account or instance, items will receive new IDs. To find an item's original `id` (which matches the `attachments/<original-id>/` folder name), look up the item using identifying fields (such as `name`, `login.username`, `login.uris`, or `type`): check your decrypted personal vault JSON export (`backup_*_personal.json` or `backup_*.json`) for personal items (`organizationId: null`), or the matching decrypted organization JSON export (`backup_*_org-<id>.json` or `org_<id>.json`) for organization-owned items (`organizationId` set). In `bitwarden` encryption mode, `.enc` backups are imported directly and `bw import` assigns new item IDs, so `bw list items`, `bw export --format json` (personal), and `bw export --organizationid <target-org-id> --format json` (organization) on the destination vault only show the newly assigned IDs—they cannot recover the original attachment folder IDs once the source vault is gone. To preserve attachment-to-item mapping when using `bitwarden` mode, save an unencrypted export or ID mapping from the source vault beforehand (via `bw export --format json` for personal items and `bw export --organizationid <org-id> --format json` for organization items), or use `raw` encryption mode; otherwise, attachments must be matched to restored items manually by inspecting the extracted files. Once matched, pass the destination item's new ID to `bw create attachment`.
 
 * **Restoring to KeePass / KeePassXC**:
   * Open KeePassXC, locate the imported entry, click **Edit Entry**, navigate to the **Advanced** section, and click **Add Attachment** to select the files from `./attachments/<item-id>/`.
@@ -395,7 +395,7 @@ KeePassXC natively supports importing Bitwarden JSON exports:
 
 1. Obtain unencrypted JSON depending on your backup encryption mode:
    - **`raw` mode**: Decrypt the `.enc` file using `decrypt.py` (or extract individual organization JSONs using `extract_orgs.py` for combined org backups).
-   - **`bitwarden` mode**: Decrypt and export to unencrypted JSON using Bitwarden CLI (`bw import bitwardenjson /path/to/backup.enc` followed by `bw export --format json`), or import the encrypted JSON file directly into KeePassXC if supported by your KeePassXC version. **Warning:** `bw import` adds items to the currently logged-in vault and `bw export` exports all items in that vault (including any pre-existing items), so perform this conversion in an empty Bitwarden account or isolated vault.
+   - **`bitwarden` mode**: Decrypt and export to unencrypted JSON using Bitwarden CLI (for personal backups: `bw import bitwardenjson /path/to/backup.enc` followed by `bw export --format json`; for organization backups: `bw import bitwardenjson /path/to/backup_timestamp_org-id.enc --organizationid <target-org-id>` followed by `bw export --organizationid <target-org-id> --format json`), or import the encrypted JSON file directly into KeePassXC if supported by your KeePassXC version. **Warning:** `bw import` adds items to the target personal or organization vault and `bw export` exports all items in that vault (including any pre-existing items), so perform this conversion in an empty Bitwarden account or isolated organization/vault.
 2. Open KeePassXC and go to **Database** > **Import** > **Bitwarden (JSON)...**
 3. Select the unencrypted `.json` file to import your items and folder structure. Note that attachments are not restored by the JSON import; extract `*_attachments.7z` separately and attach the files to entries in KeePassXC as needed.
 
@@ -419,15 +419,19 @@ csv_file = sys.argv[2] if len(sys.argv) > 2 else json_file.rsplit('.', 1)[0] + '
 with open(json_file, 'r', encoding='utf-8') as f:
     data = json.load(f)
 
+if not isinstance(data, dict):
+    print("Error: Input is not a valid personal vault JSON export.", file=sys.stderr)
+    sys.exit(1)
+
 if data.get('encrypted'):
     print("Error: Input JSON is encrypted. Decrypt it before converting to CSV.", file=sys.stderr)
     sys.exit(1)
 
-if 'collections' in data and 'folders' not in data:
-    print("Error: Organization JSON export detected. This script only converts personal vault JSON exports.", file=sys.stderr)
+if 'collections' in data or not isinstance(data.get('items'), list):
+    print("Error: Input is not a decrypted personal vault JSON export.", file=sys.stderr)
     sys.exit(1)
 
-items = data.get('items') or []
+items = data['items']
 folders = {f['id']: f.get('name') or '' for f in (data.get('folders') or []) if f.get('id')}
 
 headers = ['folder', 'favorite', 'type', 'name', 'notes', 'fields', 'reprompt', 'login_uri', 'login_username', 'login_password', 'login_totp']
