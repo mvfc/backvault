@@ -123,8 +123,11 @@ def put_key(conn: sqlcipher3.Connection, name, value) -> None:
         logging.debug("Key stored in database.")
 
 
-def get_key(conn: sqlcipher3.Connection, name: str) -> str:
-    value = conn.execute("SELECT value FROM keys WHERE name = ?", (name,)).fetchone()[0]
+def get_key(conn: sqlcipher3.Connection, name: str) -> str | None:
+    row = conn.execute("SELECT value FROM keys WHERE name = ?", (name,)).fetchone()
+    if row is None:
+        return None
+    value = row[0]
     if isinstance(value, bytes):
         value = value.decode("utf-8")
     return value

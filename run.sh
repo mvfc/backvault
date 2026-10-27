@@ -66,11 +66,28 @@ EOF
     fi
 
     BACKUP_DIR="/app/backups"
-    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
-        echo "Found existing backups in $BACKUP_DIR, skipping initial backup."
+
+    is_stale=0
+    if [ -f "$BACKUP_DIR/.complete" ]; then
+        has_enc=0
+        for f in "$BACKUP_DIR"/*.enc; do
+            if [ -e "$f" ]; then
+                has_enc=1
+                break
+            fi
+        done
+        if [ "$has_enc" -eq 0 ]; then
+            is_stale=1
+            echo "No backup files remaining in $BACKUP_DIR; removing stale .complete marker."
+            rm -f "$BACKUP_DIR/.complete" || echo "Failed to remove stale .complete marker; continuing..."
+        fi
+    fi
+
+    if [ -f "$BACKUP_DIR/.complete" ] && [ "$is_stale" -eq 0 ]; then
+        echo "Found successful backup marker in $BACKUP_DIR, skipping initial backup."
     else
         echo "Running initial backup..."
-        ./run_wrapper.sh
+        ./run_wrapper.sh || echo "Initial backup failed; scheduler will retry at next interval."
     fi
 
     echo "Starting supercronic scheduler..."

@@ -1,5 +1,5 @@
+import json
 import logging
-
 import pytest
 from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
@@ -163,9 +163,7 @@ def test_logout_cleanup_error_redacts_secrets(mock_sprun, caplog):
             stderr="unable to reach server for user supersecret",
         ),
     ]
-    client = BitwardenClient(
-        client_secret="supersecret", client_id=None, session=None
-    )
+    client = BitwardenClient(client_secret="supersecret", client_id=None, session=None)
     with caplog.at_level(logging.ERROR, logger="src.bw_client"):
         with pytest.raises(BitwardenError):
             client._run(["unlock", "--raw"])
@@ -257,8 +255,79 @@ def test_run_method_json_output(mock_sprun):
     client = BitwardenClient()
     result = client._run(["status"], capture_json=True)
     assert result == {"success": True}
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_json_embedded_in_warning_line(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects candidate JSON embedded within a warning line.
+    """
+    mock_sprun.return_value.stdout = (
+        '(node:1234) [DEP0040] DeprecationWarning: punycode {"success": true}'
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_truncated_outer_json(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects candidate nested JSON arrays/objects
+    when prefix contains malformed/truncated outer JSON.
+    """
+    mock_sprun.return_value.stdout = '{"truncated": [1, 2, 3]'
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_concatenated_json_objects(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects stdout containing
+    concatenated JSON objects (e.g. {} followed by {}).
+    """
+    mock_sprun.return_value.stdout = "{}\n{}"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_rejects_multiple_top_level_json_values(mock_sprun):
+    """
+    Tests that _run with capture_json=True rejects stdout containing
+    multiple top-level JSON values (e.g. [] followed by [1, 2, 3]).
+    """
+    mock_sprun.return_value.stdout = "[]\n[1, 2, 3]"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        client._run(["status"], capture_json=True)
+
+
+@patch("src.bw_client.sprun")
+def test_list_organizations_with_trailing_warning(mock_sprun):
+    """
+    Tests that list_organizations returns valid parsed array even when
+    stdout is followed by a deprecation warning line.
+    """
+    mock_sprun.return_value.stdout = "[]\n(node:1234) DeprecationWarning: punycode"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    result = client.list_organizations()
+    assert result == []
     mock_sprun.assert_called_once_with(
-        ["bw", "status"],
+        ["bw", "list", "organizations"],
         text=True,
         capture_output=True,
         check=True,
@@ -297,6 +366,92 @@ def test_run_method_error_handling(mock_sprun):
     client = BitwardenClient()
     with pytest.raises(BitwardenError):
         client._run(["status"])
+
+
+@patch("src.bw_client.sprun")
+def test_export_organization_and_list_organization_methods_pass_logout_on_error_false(
+    mock_sprun, monkeypatch
+):
+    """
+    Tests that list_organizations, export_organization_raw and export_organization_bitwarden
+    pass logout_on_error=False to _run so failures do not trigger logout.
+    """
+    from subprocess import CalledProcessError
+
+    monkeypatch.delenv("TEST_MODE", raising=False)
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "list"], stderr="List orgs failed"
+    )
+    client = BitwardenClient(session="test_session")
+
+    with pytest.raises(BitwardenError):
+        client.list_organizations()
+
+    list_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0][:2] == ["bw", "list"]
+    ]
+    assert len(list_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+    mock_sprun.reset_mock()
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_raw("org-123")
+
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+    mock_sprun.reset_mock()
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "export"], stderr="Org export failed"
+    )
+
+    with pytest.raises(BitwardenError):
+        client.export_organization_bitwarden(
+            "/app/backups/backup.enc", "file_pw", "org-123"
+        )
+
+    export_calls = [
+        call
+        for call in mock_sprun.call_args_list
+        if call.args[0][:2] == ["bw", "export"]
+    ]
+    assert len(export_calls) == 1
+    logout_calls = [
+        call for call in mock_sprun.call_args_list if call.args[0] == ["bw", "logout"]
+    ]
+    assert len(logout_calls) == 0
+
+
+@patch("src.bw_client.sprun")
+def test_run_method_json_parse_with_prefix_warning(mock_sprun):
+    """
+    Tests that the _run method handles JSON output prefixed with deprecation warnings containing brackets.
+    """
+    mock_sprun.return_value.stdout = (
+        '(node:1234) [DEP0040] DeprecationWarning: punycode\n{"success": true}'
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    result = client._run(["status"], capture_json=True)
+    assert result == {"success": True}
 
 
 @patch("src.bw_client.sprun")
@@ -377,7 +532,6 @@ def test_download_and_archive_attachments(mock_sprun, tmp_path):
     Tests that attachments are downloaded into per-item folders and packed
     into a password-protected 7z archive.
     """
-    import json
     import py7zr
     from subprocess import CompletedProcess
 
@@ -440,7 +594,6 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     """
     Tests that attachment ids select downloads and duplicate names get unique suffixes.
     """
-    import json
     from subprocess import CompletedProcess
 
     attachments = [
@@ -456,7 +609,9 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
         {"id": "item-2", "attachments": [{"id": "a7", "fileName": "x.txt"}]},
     ]
     mock_sprun.side_effect = [
-        CompletedProcess(["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""),
+        CompletedProcess(
+            ["bw", "list", "items"], 0, stdout=json.dumps(items), stderr=""
+        ),
         *[CompletedProcess([], 0, stdout="", stderr="") for _ in range(7)],
     ]
     client = BitwardenClient(session="existing_session")
@@ -464,9 +619,7 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert client.download_attachments(str(tmp_path)) == 7
 
     commands = [call.args[0] for call in mock_sprun.call_args_list[1:]]
-    assert [cmd[3] for cmd in commands] == [
-        "a1", "a2", "a3", "a4", "a5", "a6", "a7"
-    ]
+    assert [cmd[3] for cmd in commands] == ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]
     expected_paths = [
         "item-1/x.txt",
         "item-1/x_1.txt",
