@@ -46,3 +46,12 @@ def test_parse_json_output_rejects_unrelated_warning_mentions(message, position)
         output = f'{{"status": "ok"}}\n{message}'
     with pytest.raises(json.JSONDecodeError):
         parse_json_output(output)
+
+
+def test_parse_json_output_handles_empty_and_warning_only_output():
+    assert parse_json_output("") == []
+    assert parse_json_output("   \n  ") == []
+    assert (
+        parse_json_output('Could not find data file, "data.json"; creating it instead.')
+        == []
+    )

@@ -77,6 +77,8 @@ def _is_warning_text(text: str) -> bool:
 def parse_json_output(output: str):
     """Parse JSON output from CLI command, handling warning lines in stdout."""
     output = output.strip()
+    if not output or _is_warning_text(output):
+        return []
     try:
         return json.loads(output)
     except json.JSONDecodeError:
