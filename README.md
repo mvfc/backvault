@@ -287,7 +287,7 @@ if __name__ == "__main__":
 
 ### Attachments archive (`*_attachments.7z`)
 
-If `BACKUP_ATTACHMENTS` is enabled, attachments from your personal vault items are stored in a separate AES-256 encrypted 7-zip archive (`*_attachments.7z`), regardless of the encryption mode used for the JSON export. Note that organization-owned items are not included in the attachment backup archive. It uses the same password as the JSON backup, and file names are encrypted too, so the password is required even to list the contents.
+If `BACKUP_ATTACHMENTS` is enabled, attachments from vault items the backup account can access are stored in a separate AES-256 encrypted 7-zip archive (`*_attachments.7z`), regardless of the encryption mode used for the JSON export. This includes organization-owned items shared with the backup account, but not organization items the account cannot access. It uses the same password as the JSON backup, and file names are encrypted too, so the password is required even to list the contents.
 
 Extract it with any 7-Zip compatible tool:
 
