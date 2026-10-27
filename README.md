@@ -306,6 +306,21 @@ The result contains one folder per vault item, named after the item id (matching
 <item-id-2>/photo.jpg
 ```
 
+#### How to Recover and Re-attach Files
+
+Once extracted, each folder name corresponds to an item's unique `id` in your decrypted vault JSON file.
+
+* **Restoring to Bitwarden / Vaultwarden**:
+  * **Web UI**: Open the corresponding item in your Web Vault, click **Edit**, scroll to the **Attachments** section, and upload the recovered file(s).
+  * **Bitwarden CLI**: Use the Bitwarden CLI to upload attachments directly to an item:
+    ```bash
+    bw create attachment --file ./attachments/<item-id>/document.pdf --itemid <item-id>
+    ```
+    > *Note:* If you imported your vault JSON into a new account or instance, items will have new IDs. Look up the item name in your decrypted JSON export to find the matching folder in `attachments/`, then pass the new item ID to `bw create attachment`.
+
+* **Restoring to KeePass / KeePassXC**:
+  * Open KeePassXC, locate the imported entry, click **Edit Entry**, navigate to the **Advanced** section, and click **Add Attachment** to select the files from `./attachments/<item-id>/`.
+
 ---
 
 ## 🏢 Organization Recovery & Universal Export
