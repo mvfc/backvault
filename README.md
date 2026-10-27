@@ -287,7 +287,7 @@ if __name__ == "__main__":
 
 ### Attachments archive (`*_attachments.7z`)
 
-If `BACKUP_ATTACHMENTS` is enabled, attachments are stored in a separate AES-256 encrypted 7-zip archive, regardless of the encryption mode used for the JSON export. It uses the same password as the JSON backup, and file names are encrypted too, so the password is required even to list the contents.
+If `BACKUP_ATTACHMENTS` is enabled, attachments from your personal vault items are stored in a separate AES-256 encrypted 7-zip archive (`*_attachments.7z`), regardless of the encryption mode used for the JSON export. Note that organization-owned items are not included in the attachment backup archive. It uses the same password as the JSON backup, and file names are encrypted too, so the password is required even to list the contents.
 
 Extract it with any 7-Zip compatible tool:
 
@@ -318,7 +318,7 @@ Once extracted, each folder name corresponds to an item's unique `id` in your de
     bw create attachment --file ./attachments/<item-id>/document.pdf --itemid <item-id>
     ```
 
-    > *Note:* If you imported your vault JSON into a new account or instance, items will have new IDs. Look up the item name in your decrypted JSON export to find the matching folder in `attachments/`, then pass the new item ID to `bw create attachment`.
+    > *Note:* If you imported your vault JSON into a new account or instance, items will receive new IDs. Locate the original item in your decrypted personal vault JSON export using a combination of identifying fields (such as item `name`, `username`, `login.uris`, or `type`) to determine its original `id` and locate the matching folder in `attachments/<original-id>/`. Then pass the newly created item's ID to `bw create attachment`.
 
 * **Restoring to KeePass / KeePassXC**:
   * Open KeePassXC, locate the imported entry, click **Edit Entry**, navigate to the **Advanced** section, and click **Add Attachment** to select the files from `./attachments/<item-id>/`.
