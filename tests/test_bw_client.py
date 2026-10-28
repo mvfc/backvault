@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pytest
 from unittest.mock import patch, ANY, MagicMock
 from src.bw_client import BitwardenClient, BitwardenError
@@ -653,3 +654,85 @@ def test_export_methods_invalid_path_raises_bitwarden_error(method_name, extra_a
     invalid_path = "/etc/passwd"
     with pytest.raises(BitwardenError, match="Invalid path: must be within"):
         method(invalid_path, *extra_args)
+
+
+def _decrypt_test_backup(filepath: str, password: str) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from src.bw_client import SALT_SIZE, KEY_SIZE, PBKDF2_ITERATIONS
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+    salt = data[:SALT_SIZE]
+    nonce = data[SALT_SIZE : SALT_SIZE + 12]
+    ciphertext = data[SALT_SIZE + 12 :]
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=KEY_SIZE,
+        salt=salt,
+        iterations=PBKDF2_ITERATIONS,
+    )
+    key = kdf.derive(password.encode("utf-8"))
+    aesgcm = AESGCM(key)
+    return aesgcm.decrypt(nonce, ciphertext, None)
+
+
+@pytest.mark.parametrize(
+    "method_name, extra_args",
+    [
+        ("export_raw_encrypted", ()),
+        ("export_organization_raw_encrypted", ("org-123",)),
+    ],
+)
+@patch.dict(os.environ, {"TEST_MODE": "1"})
+@patch("src.bw_client.sprun")
+def test_raw_export_methods_strip_warnings(
+    mock_sprun, method_name, extra_args, tmp_path
+):
+    """
+    Tests that export_raw_encrypted and export_organization_raw_encrypted strip warning
+    lines from CLI stdout before encrypting.
+    """
+    mock_sprun.return_value.stdout = (
+        '(node:1234) DeprecationWarning: punycode\n{"encrypted": false, "items": []}\n'
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+
+    client = BitwardenClient()
+    backup_file = str(tmp_path / "backup.enc")
+
+    method = getattr(client, method_name)
+    method(backup_file, "file_password", *extra_args)
+
+    decrypted = _decrypt_test_backup(backup_file, "file_password")
+    assert decrypted == b'{"encrypted": false, "items": []}'
+
+
+@pytest.mark.parametrize(
+    "method_name, extra_args",
+    [
+        ("export_raw_encrypted", ()),
+        ("export_organization_raw_encrypted", ("org-123",)),
+    ],
+)
+@patch.dict(os.environ, {"TEST_MODE": "1"})
+@patch("src.bw_client.sprun")
+def test_raw_export_methods_reject_invalid_json(
+    mock_sprun, method_name, extra_args, tmp_path
+):
+    """
+    Tests that export_raw_encrypted and export_organization_raw_encrypted raise
+    BitwardenError when CLI stdout does not contain valid JSON.
+    """
+    mock_sprun.return_value.stdout = "An unhandled error occurred in Bitwarden CLI"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+
+    client = BitwardenClient()
+    backup_file = str(tmp_path / "backup.enc")
+
+    method = getattr(client, method_name)
+    with pytest.raises(BitwardenError, match="Failed to parse JSON output"):
+        method(backup_file, "file_password", *extra_args)

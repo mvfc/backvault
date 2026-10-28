@@ -65,6 +65,41 @@ def _is_warning_text(text: str) -> bool:
     return True
 
 
+def _clean_and_validate_json(output: str) -> str:
+    """
+    Validate that output contains valid JSON (and optional leading/trailing warnings),
+    and return the cleaned raw JSON string slice.
+    Raises BitwardenError if JSON is invalid or invalid text is present.
+    """
+    output_str = output.strip()
+    try:
+        json.loads(output_str)
+        return output_str
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+    for idx, char in enumerate(output_str):
+        if char in ("{", "["):
+            try:
+                _, end = decoder.raw_decode(output_str, idx)
+                prefix = output_str[:idx]
+                suffix = output_str[end:]
+                same_line_prefix = prefix.rpartition("\n")[2]
+                if (
+                    _is_warning_text(prefix)
+                    and _is_warning_text(suffix)
+                    and not (
+                        same_line_prefix.strip() and _is_warning_text(same_line_prefix)
+                    )
+                ):
+                    return output_str[idx:end]
+            except json.JSONDecodeError:
+                continue
+    logger.error("Failed to parse JSON output")
+    raise BitwardenError("Failed to parse JSON output")
+
+
 class BitwardenClient:
     def __init__(
         self,
@@ -160,11 +195,13 @@ class BitwardenClient:
         check: bool = True,
         env: dict | None = None,
         logout_on_error: bool = True,
+        capture_raw_json: bool = False,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
+        :param capture_raw_json: validate and return raw JSON string if True
         """
         if env is None:
             env = os.environ.copy()
@@ -232,31 +269,11 @@ class BitwardenClient:
             raise BitwardenError(masked_stderr)
 
         output = result.stdout.strip()
-        if capture_json:
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                decoder = json.JSONDecoder()
-                for idx, char in enumerate(output):
-                    if char in ("{", "["):
-                        try:
-                            val, end = decoder.raw_decode(output, idx)
-                            prefix = output[:idx]
-                            suffix = output[end:]
-                            same_line_prefix = prefix.rpartition("\n")[2]
-                            if (
-                                _is_warning_text(prefix)
-                                and _is_warning_text(suffix)
-                                and not (
-                                    same_line_prefix.strip()
-                                    and _is_warning_text(same_line_prefix)
-                                )
-                            ):
-                                return val
-                        except json.JSONDecodeError:
-                            continue
-                logger.error("Failed to parse JSON output")
-                raise BitwardenError("Failed to parse JSON output")
+        if capture_raw_json:
+            return _clean_and_validate_json(output)
+        elif capture_json:
+            clean_str = _clean_and_validate_json(output)
+            return json.loads(clean_str)
         else:
             return output
 
@@ -406,7 +423,7 @@ class BitwardenClient:
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
-            cmd=["export", "--format", "json", "--raw"], capture_json=False
+            cmd=["export", "--format", "json", "--raw"], capture_raw_json=True
         )
         encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
@@ -456,7 +473,7 @@ class BitwardenClient:
         logger.info(f"Exporting organization {org_id} with raw encryption...")
         raw_json = self._run(
             cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
-            capture_json=False,
+            capture_raw_json=True,
             logout_on_error=False,
         )
         encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
