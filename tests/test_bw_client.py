@@ -632,3 +632,24 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     assert [cmd[-1] for cmd in commands] == [
         str(tmp_path / path) for path in expected_paths
     ]
+
+
+@pytest.mark.parametrize(
+    "method_name, extra_args",
+    [
+        ("export_bitwarden_encrypted", ("pw",)),
+        ("export_raw_encrypted", ("pw",)),
+        ("export_organization_bitwarden", ("pw", "org-1")),
+        ("export_organization_raw_encrypted", ("pw", "org-1")),
+    ],
+)
+def test_export_methods_invalid_path_raises_bitwarden_error(method_name, extra_args):
+    """
+    Tests that invalid backup paths (e.g., path traversal outside /app) raise BitwardenError
+    across all export methods.
+    """
+    client = BitwardenClient()
+    method = getattr(client, method_name)
+    invalid_path = "/etc/passwd"
+    with pytest.raises(BitwardenError, match="Invalid path: must be within"):
+        method(invalid_path, *extra_args)
