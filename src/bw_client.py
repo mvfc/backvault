@@ -406,11 +406,9 @@ class BitwardenClient:
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
-            cmd=["export", "--format", "json", "--raw"], capture_json=True
+            cmd=["export", "--format", "json", "--raw"], capture_json=False
         )
-        encrypted_data = self.encrypt_data(
-            json.dumps(raw_json).encode("utf-8"), file_pw
-        )
+        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
 
@@ -456,10 +454,12 @@ class BitwardenClient:
         """Export organization vault and encrypt it in-memory."""
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info(f"Exporting organization {org_id} with raw encryption...")
-        raw_json = self.export_organization_raw(org_id)
-        encrypted_data = self.encrypt_data(
-            json.dumps(raw_json).encode("utf-8"), file_pw
+        raw_json = self._run(
+            cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
+            capture_json=False,
+            logout_on_error=False,
         )
+        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
 
