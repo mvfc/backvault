@@ -1046,12 +1046,15 @@ def test_run_sh_escapes_env_variables_in_run_wrapper(tmp_path):
     )
     python_mock.chmod(0o755)
 
+    hacked_bw_marker = tmp_path / "hacked_bw_test"
+    hacked_backup_marker = tmp_path / "hacked_backup_test"
+
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
     env["DB_PATH"] = str(db_dir)
-    env["BW_INJECT_TEST"] = "https://example.com; touch /tmp/hacked_bw_test"
+    env["BW_INJECT_TEST"] = f"https://example.com; touch {hacked_bw_marker}"
     env["BACKUP_INJECT_TEST"] = (
-        "$(touch /tmp/hacked_backup_test)\nmultiline \"$var\" `id` 'quote'"
+        f"$(touch {hacked_backup_marker})\nmultiline \"$var\" `id` 'quote'"
     )
 
     real_run_sh_path = Path(__file__).parents[1] / "run.sh"
@@ -1076,18 +1079,45 @@ def test_run_sh_escapes_env_variables_in_run_wrapper(tmp_path):
         timeout=30,
     )
 
-    assert not Path("/tmp/hacked_bw_test").exists()
-    assert not Path("/tmp/hacked_backup_test").exists()
+    assert not hacked_bw_marker.exists()
+    assert not hacked_backup_marker.exists()
 
-    run_wrapper_content = (app_dir / "run_wrapper.sh").read_text()
+    run_wrapper = app_dir / "run_wrapper.sh"
+    run_wrapper_content = run_wrapper.read_text()
     assert "export BW_INJECT_TEST=" in run_wrapper_content
     assert "export BACKUP_INJECT_TEST=" in run_wrapper_content
 
     assert (
-        "PYTHON_ENV_BW_TEST=https://example.com; touch /tmp/hacked_bw_test"
+        f"PYTHON_ENV_BW_TEST=https://example.com; touch {hacked_bw_marker}"
         in res.stdout
     )
-    assert f"PYTHON_ENV_BACKUP_TEST={env['BACKUP_INJECT_TEST']}" in res.stdout
+    assert f"$(touch {hacked_backup_marker})" in res.stdout
+
+    # Verify run_wrapper.sh sets variables when executed in an environment without them
+    clean_env = {
+        k: v
+        for k, v in env.items()
+        if k not in ("BW_INJECT_TEST", "BACKUP_INJECT_TEST")
+    }
+
+    res_wrapper = subprocess.run(
+        [str(run_wrapper)],
+        cwd=str(app_dir),
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert not hacked_bw_marker.exists()
+    assert not hacked_backup_marker.exists()
+
+    assert (
+        f"PYTHON_ENV_BW_TEST=https://example.com; touch {hacked_bw_marker}"
+        in res_wrapper.stdout
+    )
+    assert f"$(touch {hacked_backup_marker})" in res_wrapper.stdout
 
 
 def test_run_sh_continues_to_supercronic_when_initial_backup_fails(tmp_path):
