@@ -1087,7 +1087,7 @@ def test_run_sh_escapes_env_variables_in_run_wrapper(tmp_path):
         "PYTHON_ENV_BW_TEST=https://example.com; touch /tmp/hacked_bw_test"
         in res.stdout
     )
-    assert "$(touch /tmp/hacked_backup_test)" in res.stdout
+    assert f"PYTHON_ENV_BACKUP_TEST={env['BACKUP_INJECT_TEST']}" in res.stdout
 
 
 def test_run_sh_continues_to_supercronic_when_initial_backup_fails(tmp_path):
