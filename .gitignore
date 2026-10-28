@@ -2,6 +2,7 @@
 __pycache__/
 .ruff_cache/
 .venv/
+bin/
 backup/
 logs/
 decrypt.py
@@ -11,4 +12,9 @@ db/
 trivy
 *bandit*
 .pre-commit*
+.secrets
+.coverage
+coverage.xml
+FLOW.md
+STATE.md
 bin/act

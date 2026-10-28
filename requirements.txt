@@ -3,3 +3,4 @@ fastapi==0.121.1
 uvicorn==0.38.0
 python-multipart==0.0.31
 cryptography==50.0.0
+py7zr==1.1.4
