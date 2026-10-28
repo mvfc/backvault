@@ -376,13 +376,17 @@ class BitwardenClient:
         logger.info("Encryption successful.")
         return salt + nonce + ciphertext
 
-    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
-        """Exports using Bitwarden's built-in encryption."""
+    def _validate_backup_file_path(self, backup_file: str) -> str:
+        """Validate backup file path, logging and re-raising BitwardenError on error."""
         try:
-            backup_file = validate_path(backup_file, "/app")
+            return validate_path(backup_file, "/app")
         except BitwardenError as e:
             logger.error(f"Invalid backup file path: {e}")
             raise
+
+    def export_bitwarden_encrypted(self, backup_file: str, file_pw: str):
+        """Exports using Bitwarden's built-in encryption."""
+        backup_file = self._validate_backup_file_path(backup_file)
         logger.info(f"Exporting with Bitwarden encryption to {backup_file}...")
         self._run(
             cmd=[
@@ -399,11 +403,7 @@ class BitwardenClient:
 
     def export_raw_encrypted(self, backup_file: str, file_pw: str):
         """Exports raw data and encrypts it in-memory."""
-        try:
-            backup_file = validate_path(backup_file, "/app")
-        except BitwardenError as e:
-            logger.error(f"Invalid backup file path: {e}")
-            raise
+        backup_file = self._validate_backup_file_path(backup_file)
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
             cmd=["export", "--format", "json", "--raw"], capture_json=True
@@ -432,11 +432,7 @@ class BitwardenClient:
         self, backup_file: str, file_pw: str, org_id: str
     ):
         """Export organization vault using Bitwarden's built-in encryption."""
-        try:
-            backup_file = validate_path(backup_file, "/app")
-        except BitwardenError as e:
-            logger.error(f"Invalid backup file path: {e}")
-            raise
+        backup_file = self._validate_backup_file_path(backup_file)
         logger.info(f"Exporting organization {org_id} with Bitwarden encryption...")
         self._run(
             cmd=[
@@ -458,11 +454,7 @@ class BitwardenClient:
         self, backup_file: str, file_pw: str, org_id: str
     ):
         """Export organization vault and encrypt it in-memory."""
-        try:
-            backup_file = validate_path(backup_file, "/app")
-        except BitwardenError as e:
-            logger.error(f"Invalid backup file path: {e}")
-            raise
+        backup_file = self._validate_backup_file_path(backup_file)
         logger.info(f"Exporting organization {org_id} with raw encryption...")
         raw_json = self.export_organization_raw(org_id)
         encrypted_data = self.encrypt_data(
