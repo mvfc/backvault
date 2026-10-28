@@ -65,16 +65,16 @@ def _is_warning_text(text: str) -> bool:
     return True
 
 
-def _clean_and_validate_json(output: str) -> str:
+def _clean_and_parse_json(output: str) -> tuple[str, Any]:
     """
-    Validate that output contains valid JSON (and optional leading/trailing warnings),
-    and return the cleaned raw JSON string slice.
+    Validate and parse output containing JSON (with optional leading/trailing warnings).
+    Returns a tuple of (cleaned raw JSON string, parsed JSON object).
     Raises BitwardenError if JSON is invalid or invalid text is present.
     """
     output_str = output.strip()
     try:
-        json.loads(output_str)
-        return output_str
+        val = json.loads(output_str)
+        return output_str, val
     except json.JSONDecodeError:
         pass
 
@@ -82,7 +82,7 @@ def _clean_and_validate_json(output: str) -> str:
     for idx, char in enumerate(output_str):
         if char in ("{", "["):
             try:
-                _, end = decoder.raw_decode(output_str, idx)
+                val, end = decoder.raw_decode(output_str, idx)
                 prefix = output_str[:idx]
                 suffix = output_str[end:]
                 same_line_prefix = prefix.rpartition("\n")[2]
@@ -93,7 +93,7 @@ def _clean_and_validate_json(output: str) -> str:
                         same_line_prefix.strip() and _is_warning_text(same_line_prefix)
                     )
                 ):
-                    return output_str[idx:end]
+                    return output_str[idx:end], val
             except json.JSONDecodeError:
                 continue
     logger.error("Failed to parse JSON output")
@@ -270,10 +270,11 @@ class BitwardenClient:
 
         output = result.stdout.strip()
         if capture_raw_json:
-            return _clean_and_validate_json(output)
+            clean_str, _ = _clean_and_parse_json(output)
+            return clean_str
         elif capture_json:
-            clean_str = _clean_and_validate_json(output)
-            return json.loads(clean_str)
+            _, val = _clean_and_parse_json(output)
+            return val
         else:
             return output
 
