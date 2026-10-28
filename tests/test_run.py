@@ -1016,6 +1016,110 @@ def test_run_sh_clears_stale_marker_and_runs_initial_backup_when_no_enc_files_ex
     assert "PYTHON_CALLED" in res.stdout
 
 
+def test_run_sh_escapes_env_variables_in_run_wrapper(tmp_path):
+    """
+    Tests that run.sh escapes BW_ and BACKUP_ environment variables properly using printf '%q'
+    when generating run_wrapper.sh, avoiding command injection.
+    """
+    import subprocess
+
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    backup_dir = app_dir / "backups"
+    backup_dir.mkdir()
+    db_dir = app_dir / "db"
+    db_dir.mkdir()
+    (db_dir / "backvault.db").write_text("dummy db")
+    (app_dir / "logs").mkdir()
+    (app_dir / "src").mkdir()
+    (app_dir / "src" / "run.py").write_text("# dummy")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    supercronic_mock = bin_dir / "supercronic"
+    supercronic_mock.write_text("#!/bin/bash\necho 'SUPERCRONIC_STARTED'\n")
+    supercronic_mock.chmod(0o755)
+
+    python_mock = bin_dir / "python"
+    python_mock.write_text(
+        '#!/bin/bash\necho "PYTHON_ENV_BW_TEST=$BW_INJECT_TEST"\necho "PYTHON_ENV_BACKUP_TEST=$BACKUP_INJECT_TEST"\nexit 0\n'
+    )
+    python_mock.chmod(0o755)
+
+    hacked_bw_marker = tmp_path / "hacked_bw_test"
+    hacked_backup_marker = tmp_path / "hacked_backup_test"
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["DB_PATH"] = str(db_dir)
+    env["BW_INJECT_TEST"] = f"https://example.com; touch {hacked_bw_marker}"
+    env["BACKUP_INJECT_TEST"] = (
+        f"$(touch {hacked_backup_marker})\nmultiline \"$var\" `id` 'quote'"
+    )
+
+    real_run_sh_path = Path(__file__).parents[1] / "run.sh"
+    run_sh_content = real_run_sh_path.read_text()
+    run_sh_adapted = (
+        run_sh_content.replace("/app", str(app_dir))
+        .replace("/usr/local/bin/python", str(python_mock))
+        .replace("/usr/local/bin/supercronic", str(supercronic_mock))
+    )
+
+    test_script = tmp_path / "test_run.sh"
+    test_script.write_text(run_sh_adapted)
+    test_script.chmod(0o755)
+
+    res = subprocess.run(
+        [str(test_script)],
+        cwd=str(app_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert not hacked_bw_marker.exists()
+    assert not hacked_backup_marker.exists()
+
+    run_wrapper = app_dir / "run_wrapper.sh"
+    run_wrapper_content = run_wrapper.read_text()
+    assert "export BW_INJECT_TEST=" in run_wrapper_content
+    assert "export BACKUP_INJECT_TEST=" in run_wrapper_content
+
+    assert (
+        f"PYTHON_ENV_BW_TEST=https://example.com; touch {hacked_bw_marker}"
+        in res.stdout
+    )
+    assert f"$(touch {hacked_backup_marker})" in res.stdout
+
+    # Verify run_wrapper.sh sets variables when executed in an environment without them
+    clean_env = {
+        k: v
+        for k, v in env.items()
+        if k not in ("BW_INJECT_TEST", "BACKUP_INJECT_TEST")
+    }
+
+    res_wrapper = subprocess.run(
+        [str(run_wrapper)],
+        cwd=str(app_dir),
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+
+    assert not hacked_bw_marker.exists()
+    assert not hacked_backup_marker.exists()
+
+    assert (
+        f"PYTHON_ENV_BW_TEST=https://example.com; touch {hacked_bw_marker}"
+        in res_wrapper.stdout
+    )
+    assert f"$(touch {hacked_backup_marker})" in res_wrapper.stdout
+
+
 def test_run_sh_continues_to_supercronic_when_initial_backup_fails(tmp_path):
     """
     Tests that run.sh continues to start supercronic even if the initial backup fails
