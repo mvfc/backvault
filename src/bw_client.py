@@ -65,6 +65,41 @@ def _is_warning_text(text: str) -> bool:
     return True
 
 
+def _clean_and_parse_json(output: str) -> tuple[str, Any]:
+    """
+    Validate and parse output containing JSON (with optional leading/trailing warnings).
+    Returns a tuple of (cleaned raw JSON string, parsed JSON object).
+    Raises BitwardenError if JSON is invalid or invalid text is present.
+    """
+    output_str = output.strip()
+    try:
+        val = json.loads(output_str)
+        return output_str, val
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+    for idx, char in enumerate(output_str):
+        if char in ("{", "["):
+            try:
+                val, end = decoder.raw_decode(output_str, idx)
+                prefix = output_str[:idx]
+                suffix = output_str[end:]
+                same_line_prefix = prefix.rpartition("\n")[2]
+                if (
+                    _is_warning_text(prefix)
+                    and _is_warning_text(suffix)
+                    and not (
+                        same_line_prefix.strip() and _is_warning_text(same_line_prefix)
+                    )
+                ):
+                    return output_str[idx:end], val
+            except json.JSONDecodeError:
+                continue
+    logger.error("Failed to parse JSON output")
+    raise BitwardenError("Failed to parse JSON output")
+
+
 class BitwardenClient:
     def __init__(
         self,
@@ -160,11 +195,13 @@ class BitwardenClient:
         check: bool = True,
         env: dict | None = None,
         logout_on_error: bool = True,
+        capture_raw_json: bool = False,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
+        :param capture_raw_json: validate and return raw JSON string if True
         """
         if env is None:
             env = os.environ.copy()
@@ -232,31 +269,12 @@ class BitwardenClient:
             raise BitwardenError(masked_stderr)
 
         output = result.stdout.strip()
-        if capture_json:
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                decoder = json.JSONDecoder()
-                for idx, char in enumerate(output):
-                    if char in ("{", "["):
-                        try:
-                            val, end = decoder.raw_decode(output, idx)
-                            prefix = output[:idx]
-                            suffix = output[end:]
-                            same_line_prefix = prefix.rpartition("\n")[2]
-                            if (
-                                _is_warning_text(prefix)
-                                and _is_warning_text(suffix)
-                                and not (
-                                    same_line_prefix.strip()
-                                    and _is_warning_text(same_line_prefix)
-                                )
-                            ):
-                                return val
-                        except json.JSONDecodeError:
-                            continue
-                logger.error("Failed to parse JSON output")
-                raise BitwardenError("Failed to parse JSON output")
+        if capture_raw_json:
+            clean_str, _ = _clean_and_parse_json(output)
+            return clean_str
+        elif capture_json:
+            _, val = _clean_and_parse_json(output)
+            return val
         else:
             return output
 
@@ -406,11 +424,9 @@ class BitwardenClient:
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
-            cmd=["export", "--format", "json", "--raw"], capture_json=True
+            cmd=["export", "--format", "json", "--raw"], capture_raw_json=True
         )
-        encrypted_data = self.encrypt_data(
-            json.dumps(raw_json).encode("utf-8"), file_pw
-        )
+        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
 
@@ -456,10 +472,12 @@ class BitwardenClient:
         """Export organization vault and encrypt it in-memory."""
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info(f"Exporting organization {org_id} with raw encryption...")
-        raw_json = self.export_organization_raw(org_id)
-        encrypted_data = self.encrypt_data(
-            json.dumps(raw_json).encode("utf-8"), file_pw
+        raw_json = self._run(
+            cmd=["export", "--organizationid", org_id, "--format", "json", "--raw"],
+            capture_raw_json=True,
+            logout_on_error=False,
         )
+        encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:
             f.write(encrypted_data)
 
