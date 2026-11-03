@@ -209,9 +209,7 @@ jobs:
           if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             echo "Logging in to Docker Hub API to delete test tags..."
             LOGIN_RESP=$(jq -n \
-              --arg username "$DOCKERHUB_USERNAME" \
-              --arg password "$DOCKERHUB_TOKEN" \
-              '{username: $username, password: $password}' | \
+              '{username: env.DOCKERHUB_USERNAME, password: env.DOCKERHUB_TOKEN}' | \
               curl -s -f -X POST \
                 -H "Content-Type: application/json" \
                 -d @- \
