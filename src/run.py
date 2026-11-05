@@ -124,6 +124,11 @@ def main():
             logger.error(f"Unlock failed: {e}")
             return 1
 
+        try:
+            source.sync()
+        except Exception as e:
+            logger.warning(f"Vault sync failed: {e}")
+
         # Determine org IDs to export (use configured or fetch all)
         # Skip API call when org exports are disabled
         org_discovery_failed = False

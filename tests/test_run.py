@@ -139,6 +139,7 @@ def test_main_raw_encryption(mock_bw_client, mock_sprun, mock_get_key, mock_db_c
     )
     mock_client_instance.login.assert_called_once()
     mock_client_instance.unlock.assert_called_once_with("test_master_pw")
+    mock_client_instance.sync.assert_called_once()
     mock_client_instance.export_raw_encrypted.assert_called_once()
     mock_client_instance.logout.assert_called_once()
     mock_client_instance.list_organizations.assert_called_once()
@@ -649,7 +650,8 @@ def test_main_attachments_archive_and_cleanup(
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.download_attachments.return_value = 2
 
-    main()
+    with patch("tempfile._rmtree", side_effect=lambda *a, **k: mock_rmtree(*a, **k)):
+        main()
 
     mock_client_instance.create_encrypted_archive.assert_called_once()
     args = mock_client_instance.create_encrypted_archive.call_args[0]
@@ -851,7 +853,10 @@ def test_main_attachment_failure_raises_exception(
         mock_client_instance.create_encrypted_archive.side_effect = fail_archive
 
     with pytest.raises(RuntimeError, match="failed"):
-        main()
+        with patch(
+            "tempfile._rmtree", side_effect=lambda *a, **k: mock_rmtree(*a, **k)
+        ):
+            main()
 
     mock_rmtree.assert_called()
     attachment_dir = mock_client_instance.download_attachments.call_args[0][0]

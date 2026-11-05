@@ -77,7 +77,7 @@ def test_login_with_api_key(mock_sprun):
     assert session_key == "test_session_key"
     assert client.session == "test_session_key"
     mock_sprun.assert_called_once_with(
-        ["bw", "login", "--apikey"],
+        ["bw", "login", "--apikey", "--raw"],
         capture_output=True,
         text=True,
         check=True,
@@ -653,3 +653,82 @@ def test_export_methods_invalid_path_raises_bitwarden_error(method_name, extra_a
     invalid_path = "/etc/passwd"
     with pytest.raises(BitwardenError, match="Invalid path: must be within"):
         method(invalid_path, *extra_args)
+
+
+@patch("src.bw_client.sprun")
+def test_sync(mock_sprun):
+    """
+    Tests that the sync method runs `bw sync`.
+    """
+    mock_sprun.return_value.stdout = ""
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient(session="test_session")
+    client.sync()
+    mock_sprun.assert_called_once_with(
+        ["bw", "sync"], text=True, capture_output=True, check=True, env=ANY
+    )
+
+
+@patch("src.bw_client.sprun")
+def test_logout_handles_not_logged_in_gracefully(mock_sprun):
+    """
+    Tests that logout does not raise when CLI returns 'You are not logged in'.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = CalledProcessError(
+        1, ["bw", "logout"], stderr="You are not logged in."
+    )
+    client = BitwardenClient(session="test_session")
+    client.logout()
+    assert client.session is None
+
+
+@patch("src.bw_client.sprun")
+def test_unlock_extracts_token_filtering_warnings(mock_sprun):
+    """
+    Tests that unlock correctly ignores deprecation warnings in stdout and extracts
+    the session token.
+    """
+    mock_sprun.return_value.stdout = (
+        "(node:1234) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.\n"
+        "actual_session_token_xyz123\n"
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    session_key = client.unlock("secret")
+    assert session_key == "actual_session_token_xyz123"
+    assert client.session == "actual_session_token_xyz123"
+
+
+@patch("src.bw_client.sprun")
+def test_unlock_empty_or_only_warnings_raises_bitwarden_error(mock_sprun):
+    """
+    Tests that unlock raises BitwardenError if stdout contains no valid session token.
+    """
+    mock_sprun.return_value.stdout = "(node:1234) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.\n"
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    with pytest.raises(BitwardenError, match="Unlock returned empty session token"):
+        client.unlock("secret")
+
+
+@patch("src.bw_client.sprun")
+def test_run_logout_on_error_clears_session(mock_sprun):
+    """
+    Tests that when a command fails with logout_on_error=True,
+    client.session is reset to None.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "export"], stderr="Vault is locked."),
+        MagicMock(returncode=0, stdout="", stderr=""),
+    ]
+    client = BitwardenClient(session="active_session")
+    with pytest.raises(BitwardenError):
+        client._run(["export"], logout_on_error=True)
+    assert client.session is None
