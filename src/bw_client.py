@@ -197,18 +197,22 @@ class BitwardenClient:
         env: dict | None = None,
         logout_on_error: bool = True,
         capture_raw_json: bool = False,
+        log_error: bool = True,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         :param capture_raw_json: validate and return raw JSON string if True
+        :param log_error: log error message if command fails (default True)
         """
         if env is None:
             env = os.environ.copy()
         env["BW_NOINTERACTION"] = "true"
         if self.session:
             env["BW_SESSION"] = self.session.strip()
+        else:
+            env.pop("BW_SESSION", None)
         full_cmd = [self.bw_cmd] + cmd
 
         # Redact sensitive values before logging
@@ -247,8 +251,9 @@ class BitwardenClient:
                 masked_e += f" returned non-zero exit status {returncode}."
             if isinstance(e, CalledProcessError) and e.stderr:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
-            logger.error(f"Failed to run command: {masked_e}")
-            if logout_on_error:
+            if log_error:
+                logger.error(f"Failed to run command: {masked_e}")
+            if logout_on_error and (self.is_logged_in or self.session):
                 logout_succeeded = False
                 try:
                     sprun(
@@ -300,7 +305,12 @@ class BitwardenClient:
             return
         logged_out = False
         try:
-            self._run(["logout"], capture_json=False, logout_on_error=False)
+            self._run(
+                ["logout"],
+                capture_json=False,
+                logout_on_error=False,
+                log_error=False,
+            )
             logged_out = True
         except Exception as e:
             stderr = str(getattr(e, "stderr", "") or "")
@@ -322,10 +332,22 @@ class BitwardenClient:
         """Return current session status"""
         return self._run(["status"])
 
-    def sync(self) -> None:
+    def sync(self, retries: int = 2, retry_delay: float = 2.0) -> None:
         """Sync vault data from server."""
         logger.info("Syncing vault with server...")
-        self._run(["sync"], capture_json=False, logout_on_error=False)
+        attempts = retries + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                self._run(["sync"], capture_json=False, logout_on_error=False)
+                break
+            except BitwardenError:
+                if attempt >= attempts:
+                    raise
+                logger.warning(
+                    f"Sync attempt {attempt}/{attempts} failed; retrying "
+                    f"in {retry_delay}s"
+                )
+                time.sleep(retry_delay)
 
     def login(
         self, email: str | None = None, password: str | None = None, raw: bool = True
@@ -359,6 +381,7 @@ class BitwardenClient:
                         check=True,
                         env=env,
                         capture_json=False,
+                        logout_on_error=False,
                     )
                     break
                 except BitwardenError:
@@ -382,7 +405,9 @@ class BitwardenClient:
                 cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(cmd, capture_json=False, env=env)
+            self.session = self._run(
+                cmd, capture_json=False, env=env, logout_on_error=False
+            )
             self.is_logged_in = True
             logger.info("Logged in successfully")
 
@@ -403,9 +428,11 @@ class BitwardenClient:
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
 
-        # Extract session token from output (strip any leading/trailing warnings)
+        # Extract session token from output (strip any leading/trailing warnings and lines with spaces)
         lines = [line.strip() for line in (result or "").splitlines() if line.strip()]
-        valid_lines = [line for line in lines if not _is_warning_text(line)]
+        valid_lines = [
+            line for line in lines if not _is_warning_text(line) and " " not in line
+        ]
         token = valid_lines[-1] if valid_lines else ""
 
         if not token:

@@ -687,6 +687,7 @@ def test_logout_handles_not_logged_in_gracefully(mock_sprun, caplog):
     assert client.session is None
     assert client.is_logged_in is False
     assert "Logged out successfully" in caplog.text
+    assert "Failed to run command" not in caplog.text
 
 
 @patch("src.bw_client.sprun")
@@ -814,6 +815,81 @@ def test_run_logout_on_error_not_logged_in_in_stderr_clears_session(mock_sprun):
         client._run(["export"], logout_on_error=True)
     assert client.session is None
     assert client.is_logged_in is False
+
+
+@patch("src.bw_client.sprun")
+def test_unlock_filters_lines_with_spaces(mock_sprun):
+    """
+    Tests that unlock ignores lines with spaces (e.g. notices or banners)
+    and extracts the actual session token.
+    """
+    mock_sprun.return_value.stdout = (
+        "actual_session_token_xyz123\n"
+        "A new version of Bitwarden CLI is available: 2026.11.0 -> 2026.12.0\n"
+    )
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    session_key = client.unlock("secret")
+    assert session_key == "actual_session_token_xyz123"
+    assert client.session == "actual_session_token_xyz123"
+
+
+@patch("src.bw_client.sprun")
+def test_login_retries_do_not_attempt_logout_on_failure(mock_sprun):
+    """
+    Tests that login retries pass logout_on_error=False, so failing attempts do not
+    attempt redundant logout calls.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "login"], stderr="Connection refused"),
+        MagicMock(returncode=0, stdout="token_123", stderr=""),
+    ]
+    client = BitwardenClient(
+        client_id="id",
+        client_secret="secret",
+        use_api_key=True,
+        login_retries=1,
+        login_retry_delay=0.01,
+    )
+    client.login()
+    for call in mock_sprun.call_args_list:
+        cmd = call[0][0]
+        assert "logout" not in cmd
+
+
+@patch("src.bw_client.sprun")
+def test_run_clears_bw_session_env_when_no_session(mock_sprun, monkeypatch):
+    """
+    Tests that _run removes BW_SESSION from env if client.session is None,
+    preventing outer environment pollution.
+    """
+    monkeypatch.setenv("BW_SESSION", "stale_session_token")
+    mock_sprun.return_value.stdout = ""
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    client._run(["status"], capture_json=False)
+    call_env = mock_sprun.call_args.kwargs["env"]
+    assert "BW_SESSION" not in call_env
+
+
+@patch("src.bw_client.sprun")
+def test_sync_retries_on_transient_failure(mock_sprun):
+    """
+    Tests that sync retries on transient BitwardenError and succeeds.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "sync"], stderr="Gateway timeout"),
+        MagicMock(returncode=0, stdout="Syncing complete.", stderr=""),
+    ]
+    client = BitwardenClient(session="test_session")
+    client.sync(retries=1, retry_delay=0.01)
+    assert mock_sprun.call_count == 2
 
 
 def _decrypt_test_backup(filepath: str, password: str) -> bytes:
