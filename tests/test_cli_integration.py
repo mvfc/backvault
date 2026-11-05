@@ -64,7 +64,13 @@ class TestCLIWorkflow:
 
         assert any("login" in c and "--apikey" in c for c in calls)
         assert any("unlock" in c for c in calls)
-        assert any("export" in c and "personal" in c for c in calls)
+        assert any(
+            "export" in cmd
+            and "--format" in cmd
+            and cmd[cmd.index("--format") + 1] == "encrypted_json"
+            and "/tmp/backups/personal.enc" in cmd
+            for cmd in (c.args[0] for c in mock_sprun.call_args_list)
+        )
         assert any(
             "export" in cmd
             and "--organizationid" in cmd

@@ -412,7 +412,7 @@ class BitwardenClient:
                 "--output",
                 backup_file,
                 "--format",
-                "json",
+                "encrypted_json",
                 "--password",
                 file_pw,
             ],

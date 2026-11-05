@@ -635,6 +635,34 @@ def test_download_attachments_duplicate_names(mock_sprun, tmp_path):
     ]
 
 
+@patch("src.bw_client.sprun")
+def test_export_bitwarden_encrypted(mock_sprun):
+    """
+    Tests that export_bitwarden_encrypted calls bw export with encrypted_json format.
+    """
+    mock_sprun.return_value.stdout = ""
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient(session="test_session")
+    client.export_bitwarden_encrypted("/app/backups/backup.enc", "test_file_pw")
+    mock_sprun.assert_called_once_with(
+        [
+            "bw",
+            "export",
+            "--output",
+            "/app/backups/backup.enc",
+            "--format",
+            "encrypted_json",
+            "--password",
+            "test_file_pw",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+        env=ANY,
+    )
+
+
 @pytest.mark.parametrize(
     "method_name, extra_args",
     [
