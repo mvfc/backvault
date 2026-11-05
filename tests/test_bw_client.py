@@ -797,6 +797,25 @@ def test_run_logout_on_error_failure_preserves_session(mock_sprun):
     assert client.is_logged_in is True
 
 
+@patch("src.bw_client.sprun")
+def test_run_logout_on_error_not_logged_in_in_stderr_clears_session(mock_sprun):
+    """
+    Tests that when automatic cleanup logout fails with 'You are not logged in' in stderr
+    (where str(inner_e) does not include stderr), the session is cleared.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "export"], stderr="Vault is locked."),
+        CalledProcessError(1, ["bw", "logout"], stderr="You are not logged in."),
+    ]
+    client = BitwardenClient(session="active_session")
+    with pytest.raises(BitwardenError):
+        client._run(["export"], logout_on_error=True)
+    assert client.session is None
+    assert client.is_logged_in is False
+
+
 def _decrypt_test_backup(filepath: str, password: str) -> bytes:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC

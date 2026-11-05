@@ -260,7 +260,8 @@ class BitwardenClient:
                     )
                     logout_succeeded = True
                 except Exception as inner_e:
-                    err_msg = str(inner_e).lower()
+                    stderr = str(getattr(inner_e, "stderr", "") or "")
+                    err_msg = f"{inner_e} {stderr}".lower()
                     if "not logged in" in err_msg or "unauthenticated" in err_msg:
                         logout_succeeded = True
                     else:
@@ -302,7 +303,8 @@ class BitwardenClient:
             self._run(["logout"], capture_json=False, logout_on_error=False)
             logged_out = True
         except Exception as e:
-            err_msg = str(e).lower()
+            stderr = str(getattr(e, "stderr", "") or "")
+            err_msg = f"{e} {stderr}".lower()
             if "not logged in" in err_msg or "unauthenticated" in err_msg:
                 logger.debug("Already logged out.")
                 logged_out = True
