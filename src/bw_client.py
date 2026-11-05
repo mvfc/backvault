@@ -249,6 +249,7 @@ class BitwardenClient:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
             logger.error(f"Failed to run command: {masked_e}")
             if logout_on_error:
+                logout_succeeded = False
                 try:
                     sprun(
                         [self.bw_cmd, "logout"],
@@ -257,14 +258,20 @@ class BitwardenClient:
                         check=True,
                         env=env,
                     )
+                    logout_succeeded = True
                 except Exception as inner_e:
-                    logger.error(
-                        f"Failed to log out after error. Failure: "
-                        f"{self._redact_text(_safe_error(inner_e), env)}"
-                    )
+                    err_msg = str(inner_e).lower()
+                    if "not logged in" in err_msg or "unauthenticated" in err_msg:
+                        logout_succeeded = True
+                    else:
+                        logger.error(
+                            f"Failed to log out after error. Failure: "
+                            f"{self._redact_text(_safe_error(inner_e), env)}"
+                        )
                 finally:
-                    self.session = None
-                    self.is_logged_in = False
+                    if logout_succeeded:
+                        self.session = None
+                        self.is_logged_in = False
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -302,8 +309,9 @@ class BitwardenClient:
             else:
                 logger.warning(f"Logout encountered issue: {e}")
         finally:
-            self.session = None
-            self.is_logged_in = False
+            if logged_out:
+                self.session = None
+                self.is_logged_in = False
 
         if logged_out:
             logger.info("Logged out successfully")

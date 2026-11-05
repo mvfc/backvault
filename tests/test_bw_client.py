@@ -711,7 +711,8 @@ def test_logout_with_is_logged_in_and_no_session(mock_sprun):
 @patch("src.bw_client.sprun")
 def test_logout_unexpected_failure_does_not_log_success(mock_sprun, caplog):
     """
-    Tests that unexpected failures during logout log a warning and do NOT log success.
+    Tests that unexpected failures during logout log a warning, do NOT log success,
+    and preserve session state so callers can retry.
     """
     from subprocess import CalledProcessError
 
@@ -721,8 +722,8 @@ def test_logout_unexpected_failure_does_not_log_success(mock_sprun, caplog):
     client = BitwardenClient(session="test_session")
     with caplog.at_level(logging.INFO):
         client.logout()
-    assert client.session is None
-    assert client.is_logged_in is False
+    assert client.session == "test_session"
+    assert client.is_logged_in is True
     assert "Logout encountered issue" in caplog.text
     assert "Logged out successfully" not in caplog.text
 
@@ -761,7 +762,7 @@ def test_unlock_empty_or_only_warnings_raises_bitwarden_error(mock_sprun):
 @patch("src.bw_client.sprun")
 def test_run_logout_on_error_clears_session(mock_sprun):
     """
-    Tests that when a command fails with logout_on_error=True,
+    Tests that when a command fails with logout_on_error=True and logout succeeds,
     client.session is reset to None.
     """
     from subprocess import CalledProcessError
@@ -774,6 +775,26 @@ def test_run_logout_on_error_clears_session(mock_sprun):
     with pytest.raises(BitwardenError):
         client._run(["export"], logout_on_error=True)
     assert client.session is None
+    assert client.is_logged_in is False
+
+
+@patch("src.bw_client.sprun")
+def test_run_logout_on_error_failure_preserves_session(mock_sprun):
+    """
+    Tests that when a command fails with logout_on_error=True and logout fails,
+    client.session and is_logged_in remain set so outer cleanup can retry.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = [
+        CalledProcessError(1, ["bw", "export"], stderr="Vault is locked."),
+        CalledProcessError(2, ["bw", "logout"], stderr="Connection timeout"),
+    ]
+    client = BitwardenClient(session="active_session")
+    with pytest.raises(BitwardenError):
+        client._run(["export"], logout_on_error=True)
+    assert client.session == "active_session"
+    assert client.is_logged_in is True
 
 
 def _decrypt_test_backup(filepath: str, password: str) -> bytes:
