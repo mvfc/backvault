@@ -27,9 +27,12 @@ jobs:
           images: |
             ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
             ${{ env.REGISTRY_DOCKERHUB }}/mvflc/backvault
+          flavor: |
+            latest=false
           tags: |
+            type=ref,event=tag
             type=semver,pattern={{version}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

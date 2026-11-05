@@ -27,11 +27,19 @@ if [ $# -eq 0 ]; then
     DB_FILE="${DB_PATH:-/app/db}/backvault.db"
 
     # Prepare wrapper that runs backup
-    cat > /app/run_wrapper.sh <<EOF
+    cat > /app/run_wrapper.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
-export PATH="/usr/local/bin:\$PATH"
-$(printenv | grep -E 'BW_|BACKUP_' | sed 's/^/export /')
+export PATH="/usr/local/bin:$PATH"
+EOF
+
+    while IFS= read -r var; do
+        if [[ "$var" =~ ^(BW_|BACKUP_) ]]; then
+            printf "export %s=%q\n" "$var" "${!var}" >> /app/run_wrapper.sh
+        fi
+    done < <(compgen -v)
+
+    cat >> /app/run_wrapper.sh <<'EOF'
 /usr/local/bin/python /app/src/run.py 2>&1 | tee -a /app/logs/cron.log
 EOF
 

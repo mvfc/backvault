@@ -381,21 +381,55 @@ def bw_session(vaultwarden_container, bw_env, monkeypatch):
     try:
         client = BitwardenClient()
         client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
-        session = client.unlock(password=TEST_PASSWORD)
     except BitwardenError as e:
         handle_error(f"No usable test account; login/unlock failed: {e}")
 
-    session = extract_bw_token(session) or session
-    bw_env["BW_SESSION"] = session
-
-    # Run initial sync so the local vault data cache is populated
+    # Sync BEFORE unlocking. `bw login` runs a full sync, but it can be skipped
+    # (e.g. a stale revision date), leaving the encrypted private key unset in
+    # local state. If a later CLI process finds an auto-unlock key it cannot
+    # validate against that private key, it logs "Invalid key, throwing away
+    # stored keys" and deletes it, so every command after that sees the vault
+    # as locked. Syncing before `bw unlock` stores the private key first, so
+    # the key written by unlock validates in every later process.
+    sync_env = {**bw_env}
+    if client.session:
+        sync_env["BW_SESSION"] = extract_bw_token(client.session) or client.session
     sync_result = subprocess.run(
-        ["bw", "sync"], capture_output=True, text=True, env=bw_env
+        ["bw", "sync", "--force"], capture_output=True, text=True, env=sync_env
     )
     if sync_result.returncode != 0:
         handle_error(
             f"bw sync failed with exit code {sync_result.returncode}: {sync_result.stderr.strip()}"
         )
+
+    session = ""
+    status = {}
+    for _ in range(3):
+        try:
+            session = client.unlock(password=TEST_PASSWORD)
+        except BitwardenError as e:
+            handle_error(f"No usable test account; login/unlock failed: {e}")
+        session = extract_bw_token(session) or session
+        client.session = session
+
+        status_result = subprocess.run(
+            ["bw", "status"],
+            capture_output=True,
+            text=True,
+            env={**bw_env, "BW_SESSION": session},
+        )
+        try:
+            status = parse_json_output(status_result.stdout)
+        except Exception:
+            status = {}
+        if status.get("status") == "unlocked":
+            break
+    else:
+        handle_error(
+            f"Vault still locked after unlock (status={status.get('status')!r})"
+        )
+
+    bw_env["BW_SESSION"] = session
 
     yield {"session": session, "bw_env": bw_env}
 
