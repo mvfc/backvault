@@ -126,6 +126,7 @@ class BitwardenClient:
         """
         self.bw_cmd = bw_cmd
         self.session = session
+        self.is_logged_in = session is not None
         self.client_id = client_id
         self.client_secret = client_secret
         self.login_retries = login_retries
@@ -196,18 +197,22 @@ class BitwardenClient:
         env: dict | None = None,
         logout_on_error: bool = True,
         capture_raw_json: bool = False,
+        log_error: bool = True,
     ) -> Any:
         """
         Run a bw CLI command safely.
         :param cmd: list of arguments, e.g., ["list", "items"]
         :param capture_json: parse stdout as JSON if True
         :param capture_raw_json: validate and return raw JSON string if True
+        :param log_error: log error message if command fails (default True)
         """
         if env is None:
             env = os.environ.copy()
         env["BW_NOINTERACTION"] = "true"
         if self.session:
-            env["BW_SESSION"] = self.session
+            env["BW_SESSION"] = self.session.strip()
+        else:
+            env.pop("BW_SESSION", None)
         full_cmd = [self.bw_cmd] + cmd
 
         # Redact sensitive values before logging
@@ -246,8 +251,10 @@ class BitwardenClient:
                 masked_e += f" returned non-zero exit status {returncode}."
             if isinstance(e, CalledProcessError) and e.stderr:
                 masked_e += f" stderr: {self._redact_text(str(e.stderr), env)}"
-            logger.error(f"Failed to run command: {masked_e}")
-            if logout_on_error:
+            if log_error:
+                logger.error(f"Failed to run command: {masked_e}")
+            if logout_on_error and (self.is_logged_in or self.session):
+                logout_succeeded = False
                 try:
                     sprun(
                         [self.bw_cmd, "logout"],
@@ -256,11 +263,21 @@ class BitwardenClient:
                         check=True,
                         env=env,
                     )
+                    logout_succeeded = True
                 except Exception as inner_e:
-                    logger.error(
-                        f"Failed to log out after error. Failure: "
-                        f"{self._redact_text(_safe_error(inner_e), env)}"
-                    )
+                    stderr = str(getattr(inner_e, "stderr", "") or "")
+                    err_msg = f"{inner_e} {stderr}".lower()
+                    if "not logged in" in err_msg or "unauthenticated" in err_msg:
+                        logout_succeeded = True
+                    else:
+                        logger.error(
+                            f"Failed to log out after error. Failure: "
+                            f"{self._redact_text(_safe_error(inner_e), env)}"
+                        )
+                finally:
+                    if logout_succeeded:
+                        self.session = None
+                        self.is_logged_in = False
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -282,21 +299,59 @@ class BitwardenClient:
     # Core API methods
     # -------------------------------
     def logout(self) -> None:
-        """Logout and clear session. No-op if no session is active."""
-        if self.session is None:
+        """Logout and clear session. No-op if no session is active. Safe and idempotent."""
+        if not self.is_logged_in and self.session is None:
             logger.info("No active session; skipping logout")
             return
-        self._run(["logout"], capture_json=False)
-        self.session = None
-        logger.info("Logged out successfully")
+        logged_out = False
+        try:
+            self._run(
+                ["logout"],
+                capture_json=False,
+                logout_on_error=False,
+                log_error=False,
+            )
+            logged_out = True
+        except Exception as e:
+            stderr = str(getattr(e, "stderr", "") or "")
+            err_msg = f"{e} {stderr}".lower()
+            if "not logged in" in err_msg or "unauthenticated" in err_msg:
+                logger.debug("Already logged out.")
+                logged_out = True
+            else:
+                logger.warning(f"Logout encountered issue: {e}")
+        finally:
+            if logged_out:
+                self.session = None
+                self.is_logged_in = False
+
+        if logged_out:
+            logger.info("Logged out successfully")
 
     def status(self) -> dict[str, Any]:
         """Return current session status"""
         return self._run(["status"])
 
+    def sync(self, retries: int = 2, retry_delay: float = 2.0) -> None:
+        """Sync vault data from server."""
+        logger.info("Syncing vault with server...")
+        attempts = retries + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                self._run(["sync"], capture_json=False, logout_on_error=False)
+                break
+            except BitwardenError:
+                if attempt >= attempts:
+                    raise
+                logger.warning(
+                    f"Sync attempt {attempt}/{attempts} failed; retrying "
+                    f"in {retry_delay}s"
+                )
+                time.sleep(retry_delay)
+
     def login(
         self, email: str | None = None, password: str | None = None, raw: bool = True
-    ) -> str:
+    ) -> str | None:
         """
         Login with email/password or API key.
         Returns session key if raw=True.
@@ -310,10 +365,13 @@ class BitwardenClient:
             env["BW_CLIENTSECRET"] = self.client_secret
 
             cmd = ["login", "--apikey"]
+            if raw:
+                cmd.append("--raw")
 
             # Retry so transient failures (e.g. the server still starting up
             # after a host reboot) do not abort the whole run.
             attempts = self.login_retries + 1
+            result = None
             for attempt in range(1, attempts + 1):
                 try:
                     result = self._run(
@@ -323,6 +381,7 @@ class BitwardenClient:
                         check=True,
                         env=env,
                         capture_json=False,
+                        logout_on_error=False,
                     )
                     break
                 except BitwardenError:
@@ -333,7 +392,8 @@ class BitwardenClient:
                         f"in {self.login_retry_delay}s"
                     )
                     time.sleep(self.login_retry_delay)
-            self.session = result
+            self.session = result.strip() if result else None
+            self.is_logged_in = True
             logger.info("Logged in successfully")
 
         else:
@@ -345,7 +405,10 @@ class BitwardenClient:
                 cmd += ["--passwordenv", "BW_PASSWORD"]
             if raw:
                 cmd.append("--raw")
-            self.session = self._run(cmd, capture_json=False, env=env)
+            self.session = self._run(
+                cmd, capture_json=False, env=env, logout_on_error=False
+            )
+            self.is_logged_in = True
             logger.info("Logged in successfully")
 
         return self.session
@@ -356,7 +419,8 @@ class BitwardenClient:
         Returns session token.
         """
         env = os.environ.copy()
-        env["BW_SESSION"] = self.session
+        if self.session:
+            env["BW_SESSION"] = self.session.strip()
         env["BW_PASSWORD"] = password
 
         cmd = ["unlock", "--passwordenv", "BW_PASSWORD", "--raw"]
@@ -364,8 +428,17 @@ class BitwardenClient:
             cmd, capture_output=True, text=True, check=True, env=env, capture_json=False
         )
 
-        if result:
-            self.session = result
+        # Extract session token from output (strip any leading/trailing warnings and lines with spaces)
+        lines = [line.strip() for line in (result or "").splitlines() if line.strip()]
+        valid_lines = [
+            line for line in lines if not _is_warning_text(line) and " " not in line
+        ]
+        token = valid_lines[-1] if valid_lines else ""
+
+        if not token:
+            raise BitwardenError("Unlock returned empty session token")
+
+        self.session = token
         logger.info("Vault unlocked successfully")
         return self.session
 
@@ -412,11 +485,12 @@ class BitwardenClient:
                 "--output",
                 backup_file,
                 "--format",
-                "json",
+                "encrypted_json",
                 "--password",
                 file_pw,
             ],
             capture_json=False,
+            logout_on_error=False,
         )
 
     def export_raw_encrypted(self, backup_file: str, file_pw: str):
@@ -424,7 +498,9 @@ class BitwardenClient:
         backup_file = self._validate_backup_file_path(backup_file)
         logger.info("Exporting raw data from Bitwarden...")
         raw_json = self._run(
-            cmd=["export", "--format", "json", "--raw"], capture_raw_json=True
+            cmd=["export", "--format", "json", "--raw"],
+            capture_raw_json=True,
+            logout_on_error=False,
         )
         encrypted_data = self.encrypt_data(raw_json.encode("utf-8"), file_pw)
         with open(backup_file, "wb") as f:

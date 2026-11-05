@@ -124,6 +124,12 @@ def main():
             logger.error(f"Unlock failed: {e}")
             return 1
 
+        try:
+            source.sync()
+        except Exception as e:
+            logger.error(f"Vault sync failed: {e}")
+            return 1
+
         # Determine org IDs to export (use configured or fetch all)
         # Skip API call when org exports are disabled
         org_discovery_failed = False
@@ -340,7 +346,6 @@ def main():
         return 0
     finally:
         source.logout()
-        logger.info("Successfully logged out.")
 
 
 if __name__ == "__main__":
