@@ -126,6 +126,7 @@ class BitwardenClient:
         """
         self.bw_cmd = bw_cmd
         self.session = session
+        self.is_logged_in = session is not None
         self.client_id = client_id
         self.client_secret = client_secret
         self.login_retries = login_retries
@@ -263,6 +264,7 @@ class BitwardenClient:
                     )
                 finally:
                     self.session = None
+                    self.is_logged_in = False
             raise BitwardenError(f"Failed to run command: {masked_e}") from None
 
         if result.returncode != 0:
@@ -285,20 +287,26 @@ class BitwardenClient:
     # -------------------------------
     def logout(self) -> None:
         """Logout and clear session. No-op if no session is active. Safe and idempotent."""
-        if self.session is None:
+        if not self.is_logged_in and self.session is None:
             logger.info("No active session; skipping logout")
             return
+        logged_out = False
         try:
             self._run(["logout"], capture_json=False, logout_on_error=False)
+            logged_out = True
         except Exception as e:
             err_msg = str(e).lower()
             if "not logged in" in err_msg or "unauthenticated" in err_msg:
                 logger.debug("Already logged out.")
+                logged_out = True
             else:
                 logger.warning(f"Logout encountered issue: {e}")
         finally:
             self.session = None
-        logger.info("Logged out successfully")
+            self.is_logged_in = False
+
+        if logged_out:
+            logger.info("Logged out successfully")
 
     def status(self) -> dict[str, Any]:
         """Return current session status"""
@@ -352,6 +360,7 @@ class BitwardenClient:
                     )
                     time.sleep(self.login_retry_delay)
             self.session = result.strip() if result else None
+            self.is_logged_in = True
             logger.info("Logged in successfully")
 
         else:
@@ -364,6 +373,7 @@ class BitwardenClient:
             if raw:
                 cmd.append("--raw")
             self.session = self._run(cmd, capture_json=False, env=env)
+            self.is_logged_in = True
             logger.info("Logged in successfully")
 
         return self.session

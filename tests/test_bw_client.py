@@ -672,7 +672,7 @@ def test_sync(mock_sprun):
 
 
 @patch("src.bw_client.sprun")
-def test_logout_handles_not_logged_in_gracefully(mock_sprun):
+def test_logout_handles_not_logged_in_gracefully(mock_sprun, caplog):
     """
     Tests that logout does not raise when CLI returns 'You are not logged in'.
     """
@@ -682,8 +682,49 @@ def test_logout_handles_not_logged_in_gracefully(mock_sprun):
         1, ["bw", "logout"], stderr="You are not logged in."
     )
     client = BitwardenClient(session="test_session")
+    with caplog.at_level(logging.INFO):
+        client.logout()
+    assert client.session is None
+    assert client.is_logged_in is False
+    assert "Logged out successfully" in caplog.text
+
+
+@patch("src.bw_client.sprun")
+def test_logout_with_is_logged_in_and_no_session(mock_sprun):
+    """
+    Tests that logout executes `bw logout` when is_logged_in is True even if session is None.
+    """
+    mock_sprun.return_value.stdout = ""
+    mock_sprun.return_value.stderr = ""
+    mock_sprun.return_value.returncode = 0
+    client = BitwardenClient()
+    client.is_logged_in = True
+    client.session = None
     client.logout()
     assert client.session is None
+    assert client.is_logged_in is False
+    mock_sprun.assert_called_once_with(
+        ["bw", "logout"], text=True, capture_output=True, check=True, env=ANY
+    )
+
+
+@patch("src.bw_client.sprun")
+def test_logout_unexpected_failure_does_not_log_success(mock_sprun, caplog):
+    """
+    Tests that unexpected failures during logout log a warning and do NOT log success.
+    """
+    from subprocess import CalledProcessError
+
+    mock_sprun.side_effect = CalledProcessError(
+        2, ["bw", "logout"], stderr="Fatal network error: connection refused"
+    )
+    client = BitwardenClient(session="test_session")
+    with caplog.at_level(logging.INFO):
+        client.logout()
+    assert client.session is None
+    assert client.is_logged_in is False
+    assert "Logout encountered issue" in caplog.text
+    assert "Logged out successfully" not in caplog.text
 
 
 @patch("src.bw_client.sprun")

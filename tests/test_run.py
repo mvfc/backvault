@@ -304,6 +304,43 @@ def test_main_unlock_fails(mock_bw_client, mock_get_key, mock_db_connect):
         "TEST_MODE": "1",
     },
 )
+def test_main_sync_fails(mock_bw_client, mock_get_key, mock_db_connect, caplog):
+    """
+    Tests that the main function handles a sync failure by returning 1 and not proceeding with export.
+    """
+    mock_db_connect.return_value = (MagicMock(), MagicMock())
+    mock_get_key.side_effect = [
+        "test_client_id",
+        "test_client_secret",
+        "test_master_pw",
+        "test_file_pw",
+        "",  # organization_ids (empty)
+        "multiple",  # org_export_mode
+    ]
+    mock_client_instance = mock_bw_client.return_value
+    mock_client_instance.sync.side_effect = Exception("Sync failed")
+
+    result = main()
+
+    assert result == 1
+    assert "Vault sync failed: Sync failed" in caplog.text
+    mock_client_instance.export_bitwarden_encrypted.assert_not_called()
+    mock_client_instance.logout.assert_called_once()
+
+
+@patch("src.run.db_connect")
+@patch("src.run.get_key")
+@patch("src.run.BitwardenClient")
+@patch.dict(
+    os.environ,
+    {
+        "BW_SERVER": "https://test.server",
+        "BACKUP_DIR": "/tmp/backups",
+        "DB_PATH": "/tmp/db.db",
+        "PRAGMA_KEY_FILE": "/tmp/db.key",
+        "TEST_MODE": "1",
+    },
+)
 def test_main_org_discovery_failure_returns_nonzero(
     mock_bw_client, mock_get_key, mock_db_connect
 ):
@@ -650,7 +687,10 @@ def test_main_attachments_archive_and_cleanup(
     mock_client_instance = mock_bw_client.return_value
     mock_client_instance.download_attachments.return_value = 2
 
-    with patch("tempfile._rmtree", side_effect=lambda *a, **k: mock_rmtree(*a, **k)):
+    with patch(
+        "tempfile.TemporaryDirectory._rmtree",
+        side_effect=lambda *a, **k: mock_rmtree(*a, **k),
+    ):
         main()
 
     mock_client_instance.create_encrypted_archive.assert_called_once()
@@ -854,7 +894,8 @@ def test_main_attachment_failure_raises_exception(
 
     with pytest.raises(RuntimeError, match="failed"):
         with patch(
-            "tempfile._rmtree", side_effect=lambda *a, **k: mock_rmtree(*a, **k)
+            "tempfile.TemporaryDirectory._rmtree",
+            side_effect=lambda *a, **k: mock_rmtree(*a, **k),
         ):
             main()
 
