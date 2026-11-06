@@ -128,7 +128,7 @@ jobs:
       - name: Install Bitwarden CLI
         if: steps.validate_token.outputs.skip != 'true'
         run: |
-          npm install -g @bitwarden/cli@2026.10.1
+          npm install -g @bitwarden/cli@2025.10.0
 
       - name: Install dependencies
         if: steps.validate_token.outputs.skip != 'true'
