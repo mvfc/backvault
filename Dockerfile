@@ -1,32 +1,85 @@
-FROM python:3.13-alpine
+# ========================================================
+# Stage 1: Builder (Compiles wheels and downloads tools)
+# ========================================================
+FROM python:3.13-alpine AS builder
 
 ARG BW_VERSION="2025.10.0"
-ARG SUPERCRONIC_VERSION="v0.2.41"
-ARG SUPERCRONIC_SHA1SUM_LINUX_AMD64=f70ad28d0d739a96dc9e2087ae370c257e79b8d7
-ARG SUPERCRONIC_SHA1SUM_LINUX_ARM64=44e10e33e8d98b1d1522f6719f15fb9469786ff0
-ARG SUPERCRONIC_SHA1SUM_LINUX_ARMV7=d1e9c90160c92201233daf164088bd861b4b39a4
+ARG SUPERCRONIC_VERSION="v0.2.51"
+ARG SUPERCRONIC_SHA1SUM_LINUX_AMD64=1692066e350a88ff4d7d6474fe3c7a6c41ec5e89
+ARG SUPERCRONIC_SHA1SUM_LINUX_ARM64=9d4c2000493215a1898502b2fc2dada3e8ea8c7a
+ARG SUPERCRONIC_SHA1SUM_LINUX_ARMV7=9224966499cd319ed85759e9b6442f885d920c4f
 ARG TARGETARCH
 
-# Install minimal required packages
+# Install build dependencies
 RUN apk update && apk add --no-cache \
     curl \
-    bash \
-    unzip \
-    sqlcipher \
+    build-base \
+    cargo \
+    libffi-dev \
     openssl-dev \
     sqlite-dev \
     sqlcipher-dev \
-    build-base \
     python3-dev \
     nodejs \
-    npm \
-    coreutils \
-    libffi-dev \
-    cargo \
-    su-exec \
-    && rm -rf /var/lib/apk/*
+    npm
 
-RUN apk upgrade -a
+# Download Supercronic
+RUN set -eux; \
+    ARCH="${TARGETARCH:-}"; \
+    if [ -z "$ARCH" ]; then \
+        case "$(apk --print-arch)" in \
+            x86_64) ARCH="amd64" ;; \
+            aarch64) ARCH="arm64" ;; \
+            armv7|armhf) ARCH="arm" ;; \
+            *) ARCH="$(apk --print-arch)" ;; \
+        esac; \
+    fi; \
+    case "${ARCH}" in \
+        "amd64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_AMD64}" ;; \
+        "arm64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARM64}" ;; \
+        "arm") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
+        *) echo "Unsupported architecture for supercronic: ${ARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${ARCH}" -o /usr/local/bin/supercronic; \
+    echo "${SHA1SUM_VALUE}  /usr/local/bin/supercronic" | sha1sum -c -; \
+    chmod +x /usr/local/bin/supercronic
+
+# Install Bitwarden CLI globally into /usr/local
+RUN npm install -g --prefix=/usr/local --omit=dev @bitwarden/cli@${BW_VERSION} && \
+    npm cache clean --force
+
+# Pre-compile Python wheels for dependencies
+COPY ./requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip --no-cache-dir && \
+    pip wheel --no-cache-dir -r /tmp/requirements.txt -w /wheels
+
+
+# ========================================================
+# Stage 2: Final Minimal Runtime Image
+# ========================================================
+FROM python:3.13-alpine
+
+# Install ONLY runtime dependencies and apply security updates
+RUN apk update && \
+    apk upgrade --no-cache -a && \
+    apk add --no-cache \
+        bash \
+        su-exec \
+        sqlcipher \
+        sqlcipher-libs \
+        libffi \
+        nodejs
+
+# Copy Supercronic binary
+COPY --from=builder /usr/local/bin/supercronic /usr/local/bin/supercronic
+
+# Copy Bitwarden CLI node modules and create symlink
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/@bitwarden/cli/build/bw.js /usr/local/bin/bw
+
+# Copy and install pre-built Python wheels
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+    pip install --no-cache-dir /wheels/*
 
 # Create appgroup and appuser idempotently (GID/UID 1000 to match default PGID/PUID)
 RUN if ! getent group appgroup > /dev/null 2>&1; then \
@@ -36,39 +89,13 @@ RUN if ! getent group appgroup > /dev/null 2>&1; then \
         adduser -S -u 1000 -G appgroup appuser; \
     fi
 
-# Install Bitwarden CLI
-RUN set -eux; \
-    echo "Installing Bitwarden CLI version: ${BW_VERSION} with Node.js $(node --version)"; \
-    npm install -g @bitwarden/cli@${BW_VERSION}
-
-# Install supercronic
-RUN set -eux; \
-    echo "Installing supercronic for ${TARGETARCH}"; \
-    \
-    case "${TARGETARCH}" in \
-        "amd64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_AMD64}" ;; \
-        "arm64") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARM64}" ;; \
-        "arm") SHA1SUM_VALUE="${SUPERCRONIC_SHA1SUM_LINUX_ARMV7}" ;; \
-        *) echo "Unsupported architecture for supercronic: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    \
-    SUPERCRONIC_URL="https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}"; \
-    SUPERCRONIC_BINARY="supercronic-linux-${TARGETARCH}"; \
-    \
-    curl -fsSLO "$SUPERCRONIC_URL"; \
-    echo "${SHA1SUM_VALUE}  ${SUPERCRONIC_BINARY}" | sha1sum -c -; \
-    chmod +x "$SUPERCRONIC_BINARY"; \
-    mv "$SUPERCRONIC_BINARY" /usr/local/bin/supercronic;
-
 # Prepare working directories
 RUN mkdir -p /app/logs /app/backups /app/db /app/src /.config && \
     chmod -R 700 /app && \
     chmod -R 700 /.config
 
-# Copy project files
 WORKDIR /app
 
-COPY ./requirements.txt /app/requirements.txt
 COPY ./src /app/src
 COPY ./entrypoint.sh /app/entrypoint.sh
 COPY ./cleanup.sh /app/cleanup.sh
@@ -76,16 +103,10 @@ COPY ./run.sh /app/run.sh
 
 RUN chmod +x /app/entrypoint.sh /app/cleanup.sh /app/run.sh
 
-# Install Python dependencies
-RUN pip install --upgrade pip --no-cache-dir && \
-    pip install --no-input --no-cache-dir -r requirements.txt
-
-RUN apk del curl unzip binutils npm coreutils build-base libffi-dev cargo python3-dev openssl-dev --no-cache && \
-    rm -rf /var/lib/apk/*
-
 ENV PYTHONPATH=/app
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["/app/run.sh"]
+
 
