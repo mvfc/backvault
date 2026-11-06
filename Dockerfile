@@ -78,9 +78,8 @@ COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/@bitwarden/cli/build/bw.js /usr/local/bin/bw
 
 # Copy and install pre-built Python wheels
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && \
-    rm -rf /wheels
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+    pip install --no-cache-dir /wheels/*
 
 # Create appgroup and appuser idempotently (GID/UID 1000 to match default PGID/PUID)
 RUN if ! getent group appgroup > /dev/null 2>&1; then \
