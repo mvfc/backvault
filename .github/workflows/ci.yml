@@ -150,6 +150,17 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             sh -c 'test -d /app/backups && test -d /app/db && test -d /app/logs'
 
+      - name: Verify custom PUID and PGID (including PGID=100)
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PGID=100 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'gid=100(users)'
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=1001 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+
   e2e:
     needs: [docker-build, lint, unit-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

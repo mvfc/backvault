@@ -94,6 +94,18 @@ for platform in "${PLATFORMS[@]}"; do
         "${IMAGE_NAME}:${platform_tag}-test" \
         -c '[ "$PYTHONPATH" = "/app" ]'
 
+    echo "Testing custom PGID=100 (existing group 'users')..."
+    docker run --rm --platform "$platform" \
+        -e PGID=100 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        id | grep -q 'gid=100(users)'
+
+    echo "Testing custom PUID and PGID (new group)..."
+    docker run --rm --platform "$platform" \
+        -e PUID=1001 -e PGID=2000 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+
     echo "=== $platform: All tests passed ==="
     echo ""
 done
