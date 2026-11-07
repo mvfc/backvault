@@ -194,21 +194,71 @@ jobs:
             -e PUID=1000 -e PGID=2000 \
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             -c '
+          set -e
           cat << "EOF" > /tmp/addgroup
           #!/bin/sh
-          if [ "$3" = "appgrouptmp" ]; then
-              echo "addgroup: failed intentionally" >&2
-              exit 1
-          fi
+          case "$*" in
+              *appgrouptmp*)
+                  echo "addgroup: failed intentionally" >&2
+                  exit 1
+                  ;;
+          esac
           exec /usr/sbin/addgroup "$@"
           EOF
           chmod +x /tmp/addgroup
           export PATH=/tmp:$PATH
-          /app/entrypoint.sh id >/dev/null 2>&1 || true
-          [ "$(id -u appuser 2>/dev/null)" = "1000" ] && [ "$(id -g appuser 2>/dev/null)" = "1000" ]
+          if /app/entrypoint.sh id >/dev/null 2>&1; then
+              echo "Expected entrypoint to fail when group creation fails" >&2
+              exit 1
+          fi
+          [ "$(id -u appuser 2>/dev/null)" = "1000" ]
+          [ "$(id -g appuser 2>/dev/null)" = "1000" ]
           export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
           /app/entrypoint.sh id | grep -q "uid=1000(appuser) gid=2000(appgroup)"
           '
+
+      - name: Verify non-destructive behavior across container restarts
+        shell: bash
+        run: |
+          set -o pipefail
+          restart_cid="test-restart-${{ steps.platform-slug.outputs.slug }}-$RANDOM-$$"
+          docker create --name "$restart_cid" --platform ${{ matrix.platform }} --entrypoint /bin/sh \
+            -e PUID=1000 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            -c '
+          if [ ! -f /tmp/failed_once ]; then
+              touch /tmp/failed_once
+              cat << "EOF" > /tmp/addgroup
+          #!/bin/sh
+          case "$*" in
+              *appgrouptmp*)
+                  echo "addgroup: intentional failure" >&2
+                  exit 1
+                  ;;
+          esac
+          exec /usr/sbin/addgroup "$@"
+          EOF
+              chmod +x /tmp/addgroup
+              export PATH=/tmp:$PATH
+              exec /app/entrypoint.sh id
+          fi
+          exec /app/entrypoint.sh id
+          '
+          if docker start -a "$restart_cid" 2>/dev/null; then
+              echo "Expected container to exit with failure" >&2
+              docker rm -f "$restart_cid" >/dev/null 2>&1 || true
+              exit 1
+          fi
+          docker commit "$restart_cid" "${restart_cid}-img" >/dev/null
+          docker run --rm --entrypoint /bin/sh "${restart_cid}-img" -c '
+          set -e
+          [ "$(id -u appuser 2>/dev/null)" = "1000" ]
+          [ "$(id -g appuser 2>/dev/null)" = "1000" ]
+          '
+          docker rmi "${restart_cid}-img" >/dev/null
+          docker start -a "$restart_cid" | grep -q 'uid=1000(appuser) gid=2000(appgroup)'
+          docker rm -f "$restart_cid" >/dev/null
+
 
       - name: Verify root execution with PUID=0 and PGID=0
         shell: bash
