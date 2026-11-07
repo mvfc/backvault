@@ -29,6 +29,10 @@ if ! [ "$PUID" -le 2147483647 ] 2>/dev/null; then
     exit 1
 fi
 
+# Normalize PUID and PGID to remove leading zeros
+PGID=$(echo "$PGID" | sed 's/^0*\([0-9]\)/\1/')
+PUID=$(echo "$PUID" | sed 's/^0*\([0-9]\)/\1/')
+
 CURRENT_PGID=$(id -g appuser 2>/dev/null || echo "")
 CURRENT_PUID=$(id -u appuser 2>/dev/null || echo "")
 
@@ -73,8 +77,11 @@ fi
 
 # Ensure permissions on mounted volumes and configuration directories
 chown -R "$PUID":"$PGID" /app
-[ -d /home/appuser ] && chown -R "$PUID":"$PGID" /home/appuser
-[ -d /.config ] && chown -R "$PUID":"$PGID" /.config
+for d in /home/appuser /.config; do
+    if [ -d "$d" ]; then
+        chown -R "$PUID":"$PGID" "$d"
+    fi
+done
 
 # Execute the actual application
 exec su-exec "$PUID":"$PGID" "$@"

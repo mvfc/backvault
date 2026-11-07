@@ -2,7 +2,7 @@
 # Docker Image Test Script
 # Validates the Docker image across all supported architectures
 
-set -e
+set -eo pipefail
 
 REPO_NAME="${GITHUB_REPOSITORY:-$(git rev-parse --show-toplevel 2>/dev/null | xargs basename 2>/dev/null || echo backvault)}"
 IMAGE_NAME="${IMAGE_NAME:-ghcr.io/$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')}"
@@ -108,9 +108,21 @@ for platform in "${PLATFORMS[@]}"; do
 
     echo "Testing recovery from missing appuser with PGID=100..."
     docker run --rm --platform "$platform" --entrypoint /bin/sh \
-        -e PGID=100 \
+        -e PUID=1000 -e PGID=100 \
         "${IMAGE_NAME}:${platform_tag}-test" \
-        -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'gid=100(users)'
+        -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1000(appuser) gid=100(users)'
+
+    echo "Testing recovery from missing appuser with custom PUID and PGID..."
+    docker run --rm --platform "$platform" --entrypoint /bin/sh \
+        -e PUID=1001 -e PGID=2000 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+
+    echo "Testing zero-padded PUID and PGID normalization..."
+    docker run --rm --platform "$platform" \
+        -e PUID=01001 -e PGID=02000 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
 
     echo "Testing root execution with PUID=0 and PGID=0..."
     docker run --rm --platform "$platform" \
