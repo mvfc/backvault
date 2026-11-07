@@ -150,6 +150,39 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             sh -c 'test -d /app/backups && test -d /app/db && test -d /app/logs'
 
+      - name: Verify custom PUID and PGID (including PGID=100)
+        shell: bash
+        run: |
+          set -o pipefail
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PGID=100 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'gid=100(users)'
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=1001 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+          docker run --rm --platform ${{ matrix.platform }} --entrypoint /bin/sh \
+            -e PUID=1000 -e PGID=100 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1000(appuser) gid=100(users)'
+          docker run --rm --platform ${{ matrix.platform }} --entrypoint /bin/sh \
+            -e PUID=1001 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=0 -e PGID=0 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'uid=0(root) gid=0(root)'
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=01001 -e PGID=02000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=1001 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            bw --version
+
   e2e:
     needs: [docker-build, lint, unit-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
