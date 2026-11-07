@@ -118,6 +118,27 @@ for platform in "${PLATFORMS[@]}"; do
         "${IMAGE_NAME}:${platform_tag}-test" \
         -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
 
+    echo "Testing non-destructive behavior when group creation fails..."
+    docker run --rm --platform "$platform" --entrypoint /bin/sh \
+        -e PUID=1000 -e PGID=2000 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        -c '
+cat << "EOF" > /tmp/addgroup
+#!/bin/sh
+if [ "$3" = "appgrouptmp" ]; then
+    echo "addgroup: failed intentionally" >&2
+    exit 1
+fi
+exec /usr/sbin/addgroup "$@"
+EOF
+chmod +x /tmp/addgroup
+export PATH=/tmp:$PATH
+/app/entrypoint.sh id >/dev/null 2>&1 || true
+[ "$(id -u appuser 2>/dev/null)" = "1000" ] && [ "$(id -g appuser 2>/dev/null)" = "1000" ]
+export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+/app/entrypoint.sh id | grep -q "uid=1000(appuser) gid=2000(appgroup)"
+'
+
     echo "Testing zero-padded PUID and PGID normalization..."
     docker run --rm --platform "$platform" \
         -e PUID=01001 -e PGID=02000 \

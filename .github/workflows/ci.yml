@@ -186,6 +186,30 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
 
+      - name: Verify non-destructive behavior when group creation fails
+        shell: bash
+        run: |
+          set -o pipefail
+          docker run --rm --platform ${{ matrix.platform }} --entrypoint /bin/sh \
+            -e PUID=1000 -e PGID=2000 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            -c '
+          cat << "EOF" > /tmp/addgroup
+          #!/bin/sh
+          if [ "$3" = "appgrouptmp" ]; then
+              echo "addgroup: failed intentionally" >&2
+              exit 1
+          fi
+          exec /usr/sbin/addgroup "$@"
+          EOF
+          chmod +x /tmp/addgroup
+          export PATH=/tmp:$PATH
+          /app/entrypoint.sh id >/dev/null 2>&1 || true
+          [ "$(id -u appuser 2>/dev/null)" = "1000" ] && [ "$(id -g appuser 2>/dev/null)" = "1000" ]
+          export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+          /app/entrypoint.sh id | grep -q "uid=1000(appuser) gid=2000(appgroup)"
+          '
+
       - name: Verify root execution with PUID=0 and PGID=0
         shell: bash
         run: |
