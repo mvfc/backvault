@@ -52,8 +52,13 @@ if [ "$CURRENT_PGID" != "$PGID" ] || [ "$CURRENT_PUID" != "$PUID" ]; then
     # Determine or create group for PGID
     GROUP_NAME=$(getent group "$PGID" | head -n1 | cut -d: -f1)
     if [ -z "$GROUP_NAME" ]; then
-        # Group with this GID does not exist; create it.
-        # If appgroup already exists with another GID, remove appuser and appgroup first.
+        # Group with this GID does not exist; verify it can be created before modifying existing accounts
+        delgroup appgrouptmp >/dev/null 2>&1 || true
+        if ! addgroup -g "$PGID" appgrouptmp 2>/dev/null; then
+            echo "Error: Failed to create group appgroup with GID $PGID" >&2
+            exit 1
+        fi
+        delgroup appgrouptmp >/dev/null 2>&1 || true
         deluser appuser >/dev/null 2>&1 || true
         delgroup appgroup >/dev/null 2>&1 || true
         if ! addgroup -g "$PGID" appgroup; then
