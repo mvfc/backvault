@@ -19,6 +19,16 @@ case "$PUID" in
         ;;
 esac
 
+if ! [ "$PGID" -le 2147483647 ] 2>/dev/null; then
+    echo "Error: PGID must be between 0 and 2147483647" >&2
+    exit 1
+fi
+
+if ! [ "$PUID" -le 2147483647 ] 2>/dev/null; then
+    echo "Error: PUID must be between 0 and 2147483647" >&2
+    exit 1
+fi
+
 CURRENT_PGID=$(id -g appuser 2>/dev/null || echo "")
 CURRENT_PUID=$(id -u appuser 2>/dev/null || echo "")
 
@@ -49,16 +59,22 @@ if [ "$CURRENT_PGID" != "$PGID" ] || [ "$CURRENT_PUID" != "$PUID" ]; then
         GROUP_NAME="appgroup"
     fi
 
-    # Recreate appuser with target PUID and GROUP_NAME
-    deluser appuser >/dev/null 2>&1 || true
-    if ! adduser -S -u "$PUID" -G "$GROUP_NAME" appuser 2>&1; then
-        echo "Error: Failed to create user appuser with UID $PUID" >&2
-        exit 1
+    # Determine if PUID belongs to an existing system user (e.g. root for PUID=0)
+    EXISTING_USER=$(getent passwd "$PUID" | head -n1 | cut -d: -f1)
+    if [ -z "$EXISTING_USER" ] || [ "$EXISTING_USER" = "appuser" ]; then
+        # Recreate appuser with target PUID and GROUP_NAME
+        deluser appuser >/dev/null 2>&1 || true
+        if ! adduser -S -u "$PUID" -G "$GROUP_NAME" appuser 2>&1; then
+            echo "Error: Failed to create user appuser with UID $PUID" >&2
+            exit 1
+        fi
     fi
 fi
 
-# Ensure permissions on mounted volumes
+# Ensure permissions on mounted volumes and configuration directories
 chown -R "$PUID":"$PGID" /app
+[ -d /home/appuser ] && chown -R "$PUID":"$PGID" /home/appuser
+[ -d /.config ] && chown -R "$PUID":"$PGID" /.config
 
 # Execute the actual application
 exec su-exec "$PUID":"$PGID" "$@"

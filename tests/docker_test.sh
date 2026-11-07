@@ -106,6 +106,24 @@ for platform in "${PLATFORMS[@]}"; do
         "${IMAGE_NAME}:${platform_tag}-test" \
         id | grep -q 'uid=1001(appuser) gid=2000(appgroup)'
 
+    echo "Testing recovery from missing appuser with PGID=100..."
+    docker run --rm --platform "$platform" --entrypoint /bin/sh \
+        -e PGID=100 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        -c 'deluser appuser >/dev/null 2>&1 || true; exec /app/entrypoint.sh id' | grep -q 'gid=100(users)'
+
+    echo "Testing root execution with PUID=0 and PGID=0..."
+    docker run --rm --platform "$platform" \
+        -e PUID=0 -e PGID=0 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        id | grep -q 'uid=0(root) gid=0(root)'
+
+    echo "Testing bw execution under custom PUID/PGID..."
+    docker run --rm --platform "$platform" \
+        -e PUID=1001 -e PGID=2000 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        bw --version
+
     echo "=== $platform: All tests passed ==="
     echo ""
 done
