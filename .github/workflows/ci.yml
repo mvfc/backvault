@@ -296,6 +296,15 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
             bw --version
 
+      - name: Verify writable CLI storage under existing account PUID/PGID
+        shell: bash
+        run: |
+          set -o pipefail
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PUID=2 -e PGID=2 \
+            ${{ env.IMAGE_NAME }}:${{ steps.platform-slug.outputs.slug }}-test \
+            sh -c 'd="${BITWARDENCLI_APPDATA_DIR:-$HOME/.config}" && mkdir -p "$d" && touch "$d/.probe"'
+
   e2e:
     needs: [docker-build, lint, unit-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -422,6 +431,7 @@ jobs:
           ]
 
           def parse_next_link(link_header):
+              """Parse next page URL from GitHub API Link header."""
               if not link_header:
                   return None
               for part in link_header.split(","):

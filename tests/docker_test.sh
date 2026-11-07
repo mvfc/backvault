@@ -32,6 +32,7 @@ if ! docker buildx inspect &> /dev/null; then
     CREATED_BUILDER=1
 fi
 
+# Cleanup temporary builders and containers on exit.
 cleanup() {
     echo "Cleaning up..."
     if [ "$CREATED_BUILDER" = "1" ]; then
@@ -215,6 +216,12 @@ set -e
         -e PUID=2 -e PGID=2 \
         "${IMAGE_NAME}:${platform_tag}-test" \
         bw --version
+
+    echo "Testing writable CLI storage under existing account PUID/PGID..."
+    docker run --rm --platform "$platform" \
+        -e PUID=2 -e PGID=2 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        sh -c 'd="${BITWARDENCLI_APPDATA_DIR:-$HOME/.config}" && mkdir -p "$d" && touch "$d/.probe"'
 
     echo "=== $platform: All tests passed ==="
     echo ""
