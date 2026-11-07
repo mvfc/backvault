@@ -136,6 +136,12 @@ for platform in "${PLATFORMS[@]}"; do
         "${IMAGE_NAME}:${platform_tag}-test" \
         bw --version
 
+    echo "Testing bw execution under existing account PUID/PGID..."
+    docker run --rm --platform "$platform" \
+        -e PUID=2 -e PGID=2 \
+        "${IMAGE_NAME}:${platform_tag}-test" \
+        bw --version
+
     echo "=== $platform: All tests passed ==="
     echo ""
 done

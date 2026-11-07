@@ -4,7 +4,7 @@
 PUID=${PUID:-1000}
 PGID=${PGID:-1000}
 
-# Validate PUID and PGID are positive integers
+# Validate PUID and PGID are non-negative integers
 case "$PGID" in
     ''|*[!0-9]*)
         echo "Error: PGID must be a non-negative integer" >&2
@@ -72,13 +72,21 @@ if [ "$CURRENT_PGID" != "$PGID" ] || [ "$CURRENT_PUID" != "$PUID" ]; then
             echo "Error: Failed to create user appuser with UID $PUID" >&2
             exit 1
         fi
+    else
+        # Provide writable CLI storage for existing accounts with an unsuitable home directory
+        if [ -z "$BITWARDENCLI_APPDATA_DIR" ]; then
+            USER_HOME=$(getent passwd "$PUID" | head -n1 | cut -d: -f6)
+            if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ] || ! su-exec "$PUID":"$PGID" test -w "$USER_HOME" 2>/dev/null; then
+                export BITWARDENCLI_APPDATA_DIR="/.config"
+            fi
+        fi
     fi
 fi
 
 # Ensure permissions on mounted volumes and configuration directories
 chown -R "$PUID":"$PGID" /app
-for d in /home/appuser /.config; do
-    if [ -d "$d" ]; then
+for d in /home/appuser /.config "$BITWARDENCLI_APPDATA_DIR"; do
+    if [ -n "$d" ] && [ -d "$d" ]; then
         chown -R "$PUID":"$PGID" "$d"
     fi
 done
