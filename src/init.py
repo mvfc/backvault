@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from src.db import db_connect, put_key
 from src.utils import validate_path
 from html import escape
@@ -37,8 +37,21 @@ def health_check() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> FileResponse:
-    return FileResponse(HTML_FORM, media_type="text/html")
+def index() -> HTMLResponse:
+    encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+    with open(HTML_FORM, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    single_option = ""
+    if encryption_mode == "raw":
+        single_option = (
+            '                    <option value="single">Single combined file</option>\n'
+        )
+
+    rendered = content.replace("<!-- SINGLE_OPTION -->\n", single_option).replace(
+        "<!-- SINGLE_OPTION -->", single_option
+    )
+    return HTMLResponse(rendered, media_type="text/html")
 
 
 @app.post("/init")
