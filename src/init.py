@@ -41,6 +41,7 @@ def health_check() -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> FileResponse:
+    """Serve the setup form appropriate for the configured encryption mode."""
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
     form_file = HTML_FORM_RAW if encryption_mode == "raw" else HTML_FORM
     return FileResponse(form_file, media_type="text/html")
