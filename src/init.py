@@ -36,6 +36,7 @@ HTML_FORM_RAW = os.path.join(
 
 @app.get("/health")
 def health_check() -> dict:
+    """Return health status of the application."""
     return {"status": "ok"}
 
 
@@ -56,6 +57,7 @@ def init(
     organization_ids: str = Form(""),
     org_export_mode: str = Form("multiple"),
 ):
+    """Handle initial configuration submission and persist credentials to database."""
     # Validate org_export_mode against allowlist
     if org_export_mode not in ("single", "multiple", "none"):
         org_export_mode = "multiple"
@@ -86,6 +88,7 @@ def init(
 
 @app.get("/done", response_class=HTMLResponse)
 def done() -> str:
+    """Render setup completion page and trigger application server shutdown."""
     logging.info("Setup complete, shutting down UI...")
 
     def _shutdown():
