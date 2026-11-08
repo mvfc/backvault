@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from src.db import db_connect, put_key
 from src.utils import validate_path
 from html import escape
@@ -29,6 +29,9 @@ PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
 
 # --- UI HTML ---
 HTML_FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form.html")
+HTML_FORM_RAW = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "form_raw.html"
+)
 
 
 @app.get("/health")
@@ -37,21 +40,10 @@ def health_check() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
+def index() -> FileResponse:
     encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
-    with open(HTML_FORM, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    single_option = ""
-    if encryption_mode == "raw":
-        single_option = (
-            '                    <option value="single">Single combined file</option>\n'
-        )
-
-    rendered = content.replace("<!-- SINGLE_OPTION -->\n", single_option).replace(
-        "<!-- SINGLE_OPTION -->", single_option
-    )
-    return HTMLResponse(rendered, media_type="text/html")
+    form_file = HTML_FORM_RAW if encryption_mode == "raw" else HTML_FORM
+    return FileResponse(form_file, media_type="text/html")
 
 
 @app.post("/init")
