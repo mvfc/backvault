@@ -99,7 +99,7 @@ BackVault supports backing up **multiple organizations** from your Bitwarden acc
 1. **Organization IDs**: Comma-separated list of organization IDs to export. Leave empty to auto-discover all accessible organizations. **Note:** Auto-discovered organizations require export permission; users can configure only organizations they can export.
 2. **Export Mode**: Choose how organizations are exported:
    - **No organization exports (personal vault only)**: Skip organization exports (`none`).
-   - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`)
+   - **Single combined file**: All orgs merged into one encrypted file (`backup_{timestamp}_orgs.enc`) (available only with `raw` encryption mode)
    - **Separate files per organization**: Each org exported to its own file (`backup_{timestamp}_org-{org-id}.enc`)
 
 If `org_export_mode` is missing, it defaults to `none`. Upgraded installs must rerun setup to enable organization exports.
@@ -113,7 +113,7 @@ The personal vault is exported separately (as `backup_{timestamp}.enc` or `backu
 - **`raw` encryption mode**: Supports both Single and Separate files export options, as well as personal vault only.
 - **`bitwarden` encryption mode**: Supports Separate files per organization or personal vault only. Bitwarden CLI cannot produce a single merged org export.
 
-The UI offers **"Single combined file"** regardless of encryption mode. Selecting it with the default `bitwarden` mode when there are organizations to export causes `main()` to return `1` before the personal vault is exported, producing no backup. To export organizations with `bitwarden`, select **"Separate files per organization"**; for a combined file, set `BACKUP_ENCRYPTION_MODE=raw`.
+The setup UI dynamically adjusts based on `BACKUP_ENCRYPTION_MODE`: when set to the default `bitwarden` mode, the **"Single combined file"** option is hidden and only supported options (**"Separate files per organization"** and **"No organization exports"**) are displayed. To enable **"Single combined file"**, set `BACKUP_ENCRYPTION_MODE=raw`. If `single` mode is configured while `BACKUP_ENCRYPTION_MODE=bitwarden` and there are organizations to export, `main()` will fail fast before exporting the personal vault to prevent incomplete backups.
 
 ### Getting Organization IDs
 

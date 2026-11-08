@@ -15,13 +15,51 @@ def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
-def test_index():
+def test_index_default_hides_single_option():
     """
-    Tests the / endpoint.
+    Tests the / endpoint defaults to hiding the single org export option.
     """
-    response = client.get("/")
+    with patch.dict("os.environ", {}, clear=True):
+        response = client.get("/")
     assert response.status_code == 200
     assert "<h3>Setup complete.</h3>" not in response.text
+    assert 'value="multiple"' in response.text
+    assert 'value="none"' in response.text
+    assert 'value="single"' not in response.text
+
+
+def test_index_hides_single_option_when_bitwarden():
+    """
+    Tests the / endpoint hides single org export option when BACKUP_ENCRYPTION_MODE is bitwarden.
+    """
+    with patch.dict("os.environ", {"BACKUP_ENCRYPTION_MODE": "bitwarden"}):
+        response = client.get("/")
+    assert response.status_code == 200
+    assert 'value="multiple"' in response.text
+    assert 'value="none"' in response.text
+    assert 'value="single"' not in response.text
+
+
+def test_index_shows_single_option_when_raw():
+    """
+    Tests the / endpoint shows single org export option when BACKUP_ENCRYPTION_MODE is raw.
+    """
+    with patch.dict("os.environ", {"BACKUP_ENCRYPTION_MODE": "raw"}):
+        response = client.get("/")
+    assert response.status_code == 200
+    assert 'value="multiple"' in response.text
+    assert 'value="none"' in response.text
+    assert 'value="single"' in response.text
+
+
+def test_index_shows_single_option_when_raw_case_insensitive():
+    """
+    Tests the / endpoint handles case-insensitive BACKUP_ENCRYPTION_MODE.
+    """
+    with patch.dict("os.environ", {"BACKUP_ENCRYPTION_MODE": "RAW"}):
+        response = client.get("/")
+    assert response.status_code == 200
+    assert 'value="single"' in response.text
 
 
 @patch("src.init.db_connect")

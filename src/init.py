@@ -29,16 +29,23 @@ PRAGMA_KEY_FILE = validate_path(PRAGMA_KEY_FILE, "/app")
 
 # --- UI HTML ---
 HTML_FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form.html")
+HTML_FORM_RAW = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "form_raw.html"
+)
 
 
 @app.get("/health")
 def health_check() -> dict:
+    """Return health status of the application."""
     return {"status": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> FileResponse:
-    return FileResponse(HTML_FORM, media_type="text/html")
+    """Serve the setup form appropriate for the configured encryption mode."""
+    encryption_mode = os.getenv("BACKUP_ENCRYPTION_MODE", "bitwarden").lower()
+    form_file = HTML_FORM_RAW if encryption_mode == "raw" else HTML_FORM
+    return FileResponse(form_file, media_type="text/html")
 
 
 @app.post("/init")
@@ -50,6 +57,7 @@ def init(
     organization_ids: str = Form(""),
     org_export_mode: str = Form("multiple"),
 ):
+    """Handle initial configuration submission and persist credentials to database."""
     # Validate org_export_mode against allowlist
     if org_export_mode not in ("single", "multiple", "none"):
         org_export_mode = "multiple"
@@ -80,6 +88,7 @@ def init(
 
 @app.get("/done", response_class=HTMLResponse)
 def done() -> str:
+    """Render setup completion page and trigger application server shutdown."""
     logging.info("Setup complete, shutting down UI...")
 
     def _shutdown():

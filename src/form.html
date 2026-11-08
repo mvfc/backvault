@@ -84,13 +84,6 @@
             margin-bottom: 18px;
         }
 
-        .org-error {
-            font-size: 12px;
-            color: #ff6b6b;
-            margin-top: -14px;
-            margin-bottom: 18px;
-        }
-
         button {
             background: #f15a24;
             border: none;
@@ -113,30 +106,20 @@
     <div class="container">
         <h2>BackVault Setup</h2>
         <form action="/init" method="post">
-            <label>Bitwarden Client ID</label>
-            <input type="text" name="client_id" required />
-            <label>Bitwarden Client Secret</label>
-            <input type="password" name="client_secret" required />
-            <label>Bitwarden Master Password</label>
-            <input type="password" name="master_password" required />
-            <label>Backup File Password</label>
-            <input type="password" name="file_password" required />
+            <label for="client_id">Bitwarden Client ID</label>
+            <input id="client_id" type="text" name="client_id" required />
+            <label for="client_secret">Bitwarden Client Secret</label>
+            <input id="client_secret" type="password" name="client_secret" required />
+            <label for="master_password">Bitwarden Master Password</label>
+            <input id="master_password" type="password" name="master_password" required />
+            <label for="file_password">Backup File Password</label>
+            <input id="file_password" type="password" name="file_password" required />
             <div class="org-section">
                 <label for="org_export_mode">Organization Export Mode</label>
-                <select id="org_export_mode" name="org_export_mode" aria-describedby="org-error">
+                <select id="org_export_mode" name="org_export_mode">
                     <option value="multiple" selected>Separate files per organization</option>
                     <option value="none">No organization exports (personal vault only)</option>
-                    <option value="single">Single combined file (requires raw encryption)</option>
                 </select>
-                <p class="org-error" id="org-error" hidden>Single mode is not supported with Bitwarden encryption. Use "Separate files" or set BACKUP_ENCRYPTION_MODE=raw.</p>
-                <script>
-                (function(){
-                    var select=document.getElementById('org_export_mode');
-                    var error=document.getElementById('org-error');
-                    select.addEventListener('change',function(){error.hidden=select.value!=='single'});
-                    error.hidden = select.value !== 'single';
-                })();
-                </script>
                 <label for="organization_ids">Organization IDs (optional)</label>
                 <input id="organization_ids" type="text" name="organization_ids" placeholder="Comma-separated org IDs (leave empty for all)" />
                 <p class="org-hint">Leave empty to automatically discover all accessible organizations. Note: Auto-discovered organizations require export permission; configure only organizations you can export.</p>
